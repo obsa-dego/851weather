@@ -19,11 +19,10 @@
   let allHourlyData = []; // 5일간의 모든 시간별 데이터
   let airQualityData = []; // 미세먼지 데이터
 
-  // Sidebar view mode
-  let sidebarViewMode = 'daily'; // 'daily' | 'hourly'
-  let selectedDay = 0; // 0 = today (default)
-  let sidebarHourlyData = []; // 사이드바에서 표시할 시간별 데이터
-  let isSidebarAnimating = false;
+  // Selected day for hourly forecast
+  let selectedDayIndex = null;
+  let selectedDayHourlyData = [];
+  let viewMode = 'list'; // 'list' or 'detail'
 
   // Location search
   let showLocationSearch = false;
@@ -113,6 +112,11 @@
           if (allHourlyData.length > 0) {
             console.log('🔄 Re-running hourly forecast update with air quality data...');
             updateHourlyForecastForDay(0);
+
+            // 만약 상세 보기 중이었다면 데이터 다시 업데이트
+            if (selectedDayIndex !== null && viewMode === 'detail') {
+              updateSelectedDayHourlyForecast(selectedDayIndex);
+            }
           }
         } else {
           console.error('❌ Air quality data is not an array:', airData);
@@ -127,17 +131,17 @@
         if (dailyData && dailyData.DailyForecasts) {
           fiveDayForecast = dailyData.DailyForecasts.map(d => {
             const date = new Date(d.Date);
-            const dayName = date.toLocaleDateString('en-US', {
-              weekday: 'long',
-              month: 'long',
-              day: 'numeric'
+            const dayName = date.toLocaleDateString('ko-KR', {
+              weekday: 'short'
             });
             return {
               day: dayName,
+              date: date.getDate(),
               condition: d.Day?.IconPhrase || 'Unknown',
               high: Math.round(d.Temperature?.Maximum?.Value || 0),
               low: Math.round(d.Temperature?.Minimum?.Value || 0),
-              precipitation: d.Day?.PrecipitationProbability || 0
+              precipitation: d.Day?.PrecipitationProbability || 0,
+              icon: getWeatherIcon(d.Day?.Icon || 0)
             };
           });
         }
@@ -212,15 +216,38 @@
     });
   }
 
-  // 사이드바용 날짜별 시간별 데이터 업데이트
-  function updateSidebarHourlyData(dayIndex) {
-    if (!allHourlyData.length) return;
+
+  // 날짜 선택 핸들러
+  function selectDay(index) {
+    console.log('Selecting day:', index);
+    selectedDayIndex = index;
+    updateSelectedDayHourlyForecast(index);
+    viewMode = 'detail';
+    console.log('Selected day hourly data:', selectedDayHourlyData);
+  }
+
+  // 리스트 뷰로 돌아가기
+  function backToList() {
+    viewMode = 'list';
+    selectedDayIndex = null;
+    selectedDayHourlyData = [];
+  }
+
+  // 선택된 날짜의 시간별 예보 업데이트
+  function updateSelectedDayHourlyForecast(dayIndex) {
+    console.log('Updating hourly forecast for day:', dayIndex);
+    console.log('All hourly data length:', allHourlyData.length);
+
+    if (!allHourlyData.length) {
+      console.log('No hourly data available');
+      return;
+    }
 
     const today = new Date();
     const targetDate = new Date(today);
     targetDate.setDate(today.getDate() + dayIndex);
-
     const targetDateString = targetDate.toDateString();
+    console.log('Target date:', targetDateString);
 
     // 해당 날짜의 24시간 데이터 필터링
     const dayHourlyData = allHourlyData.filter(h => {
@@ -228,63 +255,28 @@
       return itemDate.toDateString() === targetDateString;
     });
 
-    // 미세먼지 데이터와 결합 - 간단한 DateTime 매칭
-    sidebarHourlyData = dayHourlyData.map((h, index) => {
-      const airData = airQualityData.find(air => air.DateTime === h.dateTime) || {};
-      console.log(`Sidebar ${h.dateTime}: PM10=${airData.PM10}, PM25=${airData.PM25}`);
+    console.log('Filtered hourly data count:', dayHourlyData.length);
+
+    // 미세먼지 데이터와 결합
+    selectedDayHourlyData = dayHourlyData.map(h => {
+      const airData = airQualityData.find(air => air.DateTime === h.dateTime);
+      const hour = new Date(h.dateTime).getHours();
+
+      // 체감온도 간단 계산 (실제 계산식은 더 복잡함)
+      const feelsLike = h.temp - (h.precipitation > 50 ? 2 : 0);
+
       return {
-        time: h.time,
+        hour: `${hour.toString().padStart(2, '0')}시`,
         temp: h.temp,
-        icon: h.icon,
-        dateTime: h.dateTime,
-        precipitation: h.precipitation || 0,
-        pm10: Math.round(airData.PM10 || 0),
-        pm25: Math.round(airData.PM25 || 0)
+        feelsLike: Math.round(feelsLike),
+        precipitation: h.precipitation,
+        pm10: airData?.PM10 ? Math.round(airData.PM10) : 0,
+        pm25: airData?.PM25 ? Math.round(airData.PM25) : 0,
+        icon: h.icon
       };
     });
 
-    console.log(`Sidebar hourly data for day ${dayIndex}:`, sidebarHourlyData.length, 'hours');
-  }
-
-  // 사이드바 날짜 클릭 핸들러
-  async function selectDayForSidebar(dayIndex) {
-    if (isSidebarAnimating) return;
-
-    isSidebarAnimating = true;
-    selectedDay = dayIndex;
-
-    // 시간별 데이터 업데이트
-    updateSidebarHourlyData(dayIndex);
-
-    // 사이드바를 시간별 보기로 전환
-    await new Promise(resolve => setTimeout(resolve, 150));
-    sidebarViewMode = 'hourly';
-
-    await new Promise(resolve => setTimeout(resolve, 150));
-    isSidebarAnimating = false;
-  }
-
-  // 사이드바 뒤로가기
-  async function backToDaily() {
-    if (isSidebarAnimating) return;
-
-    isSidebarAnimating = true;
-    await new Promise(resolve => setTimeout(resolve, 150));
-    sidebarViewMode = 'daily';
-    await new Promise(resolve => setTimeout(resolve, 150));
-    isSidebarAnimating = false;
-  }
-
-  function getConditionIcon(condition) {
-    const conditionLower = condition.toLowerCase();
-    if (conditionLower.includes('rain')) return '🌧️';
-    if (conditionLower.includes('cloud')) return '☁️';
-    if (conditionLower.includes('partly')) return '⛅';
-    if (conditionLower.includes('sun') || conditionLower.includes('clear')) return '☀️';
-    if (conditionLower.includes('fog')) return '🌫️';
-    if (conditionLower.includes('snow')) return '❄️';
-    if (conditionLower.includes('storm')) return '⛈️';
-    return '☁️';
+    console.log('Final selectedDayHourlyData:', selectedDayHourlyData);
   }
 
   // 지역 클릭 핸들러
@@ -443,86 +435,114 @@
       </div>
     </section>
 
-    <!-- Sidebar - 5 day forecast -->
+    <!-- Sidebar - Weekly Forecast -->
     <aside class="sidebar">
-      <div class="forecast-section">
-        <div class="forecast-header-new">
+      <div class="weekly-section">
+        <div class="weekly-header">
           <h2>주간 날씨</h2>
-          <div class="weather-summary">5일간 예보</div>
+          <div class="weekly-subtitle">5일간 예보</div>
         </div>
 
-        <div class="forecast-cards-container" class:animating={isSidebarAnimating}>
-          {#if sidebarViewMode === 'daily'}
-            <div class="forecast-cards-grid" class:fade-in={sidebarViewMode === 'daily'}>
-              {#each fiveDayForecast as day, index}
-                <div
-                  class="weather-card"
-                  style="--delay: {index * 0.1}s; --temp-ratio: {(day.high + 10) / 50}"
-                  on:click={() => selectDayForSidebar(index)}
-                  role="button"
-                  tabindex="0"
-                  on:keydown={(e) => e.key === 'Enter' && selectDayForSidebar(index)}
-                >
-                  <div class="card-header">
-                    <span class="day-label">{day.day}</span>
-                  </div>
+        <div class="weekly-content">
+          <div class="weekly-slider" style="transform: translateX({viewMode === 'detail' ? '-50%' : '0'})">
+            <!-- 주간 날씨 리스트 페이지 -->
+            <div class="weekly-page">
+              <div class="weekly-list">
+                {#each fiveDayForecast as day, index}
+                  <div
+                    class="day-item"
+                    class:today={index === 0}
+                    on:click={() => selectDay(index)}
+                    role="button"
+                    tabindex="0"
+                    on:keydown={(e) => e.key === 'Enter' && selectDay(index)}
+                  >
+                    <div class="day-info">
+                      <div class="day-name">{day.day}</div>
+                      <div class="day-date">{day.date}일</div>
+                    </div>
 
-                  <div class="weather-visual">
-                    <div class="weather-icon-large">{getConditionIcon(day.condition)}</div>
-                    <div class="weather-status">{day.condition}</div>
-                  </div>
+                    <div class="day-weather">
+                      <div class="day-icon">{day.icon}</div>
+                      <div class="day-condition">{day.condition}</div>
+                    </div>
 
-                  <div class="temperature-display">
-                    <div class="temp-main">{day.high}°</div>
-                    <div class="temp-range">{day.low}° - {day.high}°</div>
-                  </div>
+                    <div class="day-temps">
+                      <div class="temp-high">{day.high}°</div>
+                      <div class="temp-low">{day.low}°</div>
+                    </div>
 
-                  <div class="weather-details">
-                    <div class="detail-item">
-                      <span class="detail-icon">💧</span>
-                      <span class="detail-value">{day.precipitation}%</span>
+                    <div class="day-rain">
+                      <span class="rain-icon">💧</span>
+                      <span class="rain-percent">{day.precipitation}%</span>
                     </div>
                   </div>
-
-                  <div class="temp-bar">
-                    <div class="temp-fill" style="width: calc(var(--temp-ratio) * 100%)"></div>
-                  </div>
-                </div>
-              {/each}
-            </div>
-        {:else}
-          <!-- 선택된 날짜의 시간별 예보 보기 -->
-          <div class="sidebar-hourly-view" class:fade-in={sidebarViewMode === 'hourly'}>
-            <div class="sidebar-hourly-header">
-              <button class="back-button" on:click={backToDaily}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M19 12H5M12 19l-7-7 7-7"/>
-                </svg>
-                뒤로
-              </button>
-              <h3>{fiveDayForecast[selectedDay]?.day} 시간별 예보</h3>
+                {/each}
+              </div>
             </div>
 
-            <div class="sidebar-hourly-list">
-              {#each sidebarHourlyData as hour}
-                <div class="sidebar-hour-item">
-                  <div class="sidebar-hour-time">{hour.time}</div>
-                  <div class="sidebar-hour-weather">
-                    <span class="sidebar-hour-icon">{hour.icon}</span>
-                    <span class="sidebar-hour-temp">{hour.temp}°C</span>
-                  </div>
-                  <div class="sidebar-hour-details">
-                    <div class="sidebar-precipitation">💧 {hour.precipitation}%</div>
-                    <div class="sidebar-hour-air">
-                      <div class="sidebar-pm-item">PM10: {hour.pm10}</div>
-                      <div class="sidebar-pm-item">PM2.5: {hour.pm25}</div>
+            <!-- 시간별 예보 상세 페이지 -->
+            <div class="weekly-page">
+              <div class="detail-header">
+                <button class="back-button" on:click={backToList}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                  </svg>
+                </button>
+                <h3>
+                  {#if selectedDayIndex !== null && fiveDayForecast[selectedDayIndex]}
+                    {fiveDayForecast[selectedDayIndex].day} {fiveDayForecast[selectedDayIndex].date}일
+                  {:else}
+                    시간별 예보
+                  {/if}
+                </h3>
+              </div>
+              <div class="hourly-forecast-list">
+                {#if selectedDayHourlyData.length > 0}
+                  {#each selectedDayHourlyData as hour}
+                    <div class="hourly-item">
+                      <div class="hourly-time">{hour.hour}</div>
+                      <div class="hourly-icon">{hour.icon}</div>
+                      <div class="hourly-details">
+                        <div class="hourly-temp">
+                          <span class="temp-label">기온</span>
+                          <span class="temp-value">{hour.temp}°</span>
+                        </div>
+                        <div class="hourly-feels">
+                          <span class="feels-label">체감</span>
+                          <span class="feels-value">{hour.feelsLike}°</span>
+                        </div>
+                        <div class="hourly-rain">
+                          <span class="rain-label">💧</span>
+                          <span class="rain-value">{hour.precipitation}%</span>
+                        </div>
+                        <div class="hourly-dust">
+                          <div class="dust-item">
+                            <span class="dust-label">PM10</span>
+                            <span class="dust-value" class:good={hour.pm10 < 30} class:moderate={hour.pm10 >= 30 && hour.pm10 < 80} class:bad={hour.pm10 >= 80}>
+                              {hour.pm10}
+                            </span>
+                          </div>
+                          <div class="dust-item">
+                            <span class="dust-label">PM2.5</span>
+                            <span class="dust-value" class:good={hour.pm25 < 15} class:moderate={hour.pm25 >= 15 && hour.pm25 < 35} class:bad={hour.pm25 >= 35}>
+                              {hour.pm25}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
+                  {/each}
+                {:else}
+                  <div class="loading-placeholder">
+                    <span>데이터를 불러오는 중...</span>
                   </div>
-                </div>
-              {/each}
+                {/if}
+              </div>
             </div>
           </div>
-        {/if}
+        </div>
+
       </div>
     </aside>
   </main>
@@ -680,19 +700,15 @@
 
   .sidebar {
     grid-area: sidebar;
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
-    backdrop-filter: blur(20px);
-    border-radius: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    padding: 0;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(6px);
+    border-radius: 12px;
+    padding: 20px;
     position: sticky;
     top: 16px;
     height: fit-content;
-    max-height: calc(100vh - 120px);
-    display: flex;
-    flex-direction: column;
+    max-height: calc(100vh - 32px);
     overflow: hidden;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.05);
   }
 
   /* Header within current section */
@@ -800,316 +816,346 @@
     padding-bottom: 8px;
   }
 
-  /* 새로운 예보 섹션 스타일 */
-  .forecast-section {
-    padding: 20px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    backdrop-filter: blur(6px);
-    position: sticky;
-    top: 0;
-    z-index: 10;
+  /* 주간 날씨 섹션 스타일 */
+  .weekly-section {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .weekly-content {
+    flex: 1;
     overflow: hidden;
+    position: relative;
   }
 
-  .forecast-header-new {
+  .weekly-slider {
+    display: flex;
+    width: 200%;
+    height: 100%;
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .weekly-page {
+    width: 50%;
+    height: 100%;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+
+  .weekly-header {
     text-align: center;
-    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
 
-  .forecast-header-new h2 {
-    font-size: 1.3rem;
+  .weekly-header h2 {
+    font-size: 1.2rem;
     font-weight: 600;
-    margin: 0 0 0.5rem 0;
+    margin: 0 0 0.3rem 0;
     color: white;
     letter-spacing: -0.02em;
   }
 
-  .weather-summary {
-    font-size: 0.9rem;
-    opacity: 0.7;
+  .weekly-subtitle {
+    font-size: 0.85rem;
+    opacity: 0.6;
     font-weight: 400;
     color: white;
   }
 
-  .forecast-header h2 {
-    font-size: 1.3rem;
-    font-weight: 600;
-    margin: 0;
-    background: linear-gradient(135deg, #fff, rgba(255, 255, 255, 0.8));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    letter-spacing: -0.02em;
-  }
-
-  .tabs {
+  .weekly-list {
     display: flex;
-    gap: 1rem;
-  }
-
-  .tab {
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: white;
-    padding: 0.5rem 1rem;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.3s;
-    font-size: 0.9rem;
-  }
-
-  .tab.active {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.3);
-  }
-
-  .tab:hover {
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .forecast-cards-container {
+    flex-direction: column;
+    gap: 0.75rem;
     flex: 1;
     overflow-y: auto;
-    padding: 0.5rem 0;
-    max-height: calc(100vh - 200px);
   }
 
-  .forecast-cards-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 1.2rem;
-    animation: staggerIn 0.8s ease-out;
-  }
-
-  @keyframes staggerIn {
-    from { opacity: 0; transform: translateY(30px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  @keyframes slideUp {
-    from {
-      opacity: 0;
-      transform: translateY(40px) scale(0.9);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-
-  .weather-card {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
+  .day-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     padding: 1rem;
-    text-align: center;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 10px;
     border: 1px solid rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(6px);
     transition: all 0.3s ease;
+    gap: 1rem;
     cursor: pointer;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
   }
 
-  .weather-card:hover {
-    background: rgba(255, 255, 255, 0.08);
-    transform: translateY(-2px);
+  .day-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    transform: translateX(-3px);
     border-color: rgba(255, 255, 255, 0.1);
   }
 
-  .card-header {
-    margin-bottom: 1rem;
+  .day-item.today {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
   }
 
-  .day-label {
-    font-size: 1rem;
-    font-weight: 600;
-    color: white;
-    letter-spacing: -0.01em;
-  }
-
-  .weather-visual {
-    margin-bottom: 1.2rem;
-  }
-
-  .weather-icon-large {
-    font-size: 2.5rem;
-    margin-bottom: 0.5rem;
-    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
-  }
-
-  .weather-card .weather-status {
-    font-size: 0.85rem;
-    opacity: 0.8;
-    font-weight: 400;
-    color: white;
-  }
-
-  .temperature-display {
-    margin-bottom: 1rem;
-  }
-
-  .temp-main {
-    font-size: 1.8rem;
-    font-weight: 700;
-    color: white;
-    letter-spacing: -0.02em;
-    margin-bottom: 0.3rem;
-  }
-
-  .temp-range {
-    font-size: 0.8rem;
-    opacity: 0.7;
-    font-weight: 500;
-    color: white;
-  }
-
-  .weather-details {
-    margin-bottom: 1rem;
-  }
-
-  .detail-item {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.4rem;
-    margin-bottom: 0.3rem;
-  }
-
-  .detail-icon {
-    font-size: 1rem;
-  }
-
-  .detail-value {
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: #66B2FF;
-    opacity: 0.9;
-  }
-
-  .temp-bar {
-    width: 100%;
-    height: 4px;
-    background: rgba(255,255,255,0.1);
-    border-radius: 2px;
-    overflow: hidden;
-    margin-top: 1rem;
-  }
-
-  .temp-fill {
-    height: 100%;
-    background: linear-gradient(90deg,
-      #66B2FF 0%,
-      #FFA726 50%,
-      #FF6B6B 100%);
-    border-radius: 2px;
-    transition: width 0.8s ease-out;
-  }
-
-  .day-forecast.selected {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08));
-    border-color: rgba(255, 255, 255, 0.3);
-    box-shadow: 0 8px 30px rgba(255, 255, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-    transform: scale(1.02);
-  }
-
-  .sidebar-content {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    padding: 0 16px 16px 16px;
-  }
-
-  .sidebar-content.animating {
-    opacity: 0.7;
-    transition: opacity 0.3s ease;
-  }
-
-  .fade-in {
-    animation: fadeIn 0.3s ease-in-out;
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateX(20px); }
-    to { opacity: 1; transform: translateX(0); }
-  }
-
-  .day-icon {
-    font-size: 2rem;
-    width: 60px;
-    text-align: center;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
-    border-radius: 12px;
-    padding: 0.8rem 0;
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  }
 
   .day-info {
-    flex: 1;
-    margin-left: 1.2rem;
     display: flex;
     flex-direction: column;
     gap: 0.2rem;
+    min-width: 45px;
   }
 
   .day-name {
-    font-size: 1rem;
+    font-size: 0.95rem;
     font-weight: 600;
-    margin-bottom: 0;
-    background: linear-gradient(135deg, #fff, rgba(255, 255, 255, 0.8));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    letter-spacing: -0.01em;
+    color: white;
+  }
+
+  .day-date {
+    font-size: 0.75rem;
+    opacity: 0.6;
+  }
+
+  .day-weather {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    flex: 1;
+    text-align: center;
+  }
+
+  .day-icon {
+    font-size: 1.8rem;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
   }
 
   .day-condition {
-    font-size: 0.85rem;
-    opacity: 0.8;
-    margin-bottom: 0;
-    font-weight: 400;
-  }
-
-  .day-precipitation {
-    font-size: 0.8rem;
+    font-size: 0.7rem;
     opacity: 0.7;
-    background: linear-gradient(135deg, rgba(100, 200, 255, 0.8), rgba(150, 220, 255, 0.6));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    font-weight: 500;
-    margin-top: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 80px;
   }
 
   .day-temps {
     display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-    align-items: flex-end;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
-    padding: 0.8rem;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(8px);
+    align-items: center;
+    gap: 0.5rem;
   }
 
   .temp-high {
-    font-size: 1.2rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, #fff, rgba(255, 255, 255, 0.9));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    letter-spacing: -0.02em;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: white;
   }
 
   .temp-low {
-    font-size: 0.95rem;
-    opacity: 0.75;
+    font-size: 0.9rem;
+    opacity: 0.6;
+  }
+
+  .day-rain {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-width: 45px;
+    justify-content: flex-end;
+  }
+
+  .rain-icon {
+    font-size: 0.9rem;
+    opacity: 0.7;
+  }
+
+  .rain-percent {
+    font-size: 0.85rem;
+    color: #66B2FF;
     font-weight: 500;
-    letter-spacing: -0.01em;
+  }
+
+  /* Detail Header Styles */
+  .detail-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.5rem 1rem 1rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 1rem;
+  }
+
+  .detail-header h3 {
+    flex: 1;
+    text-align: center;
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: white;
+    margin: 0;
+  }
+
+  .back-button {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: white;
+  }
+
+  .back-button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateX(-2px);
+  }
+
+  .loading-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.9rem;
+  }
+
+  .hourly-forecast-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0 0.5rem;
+    height: calc(100% - 70px);
+    overflow-y: auto;
+  }
+
+  .hourly-item {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.8rem;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    transition: all 0.3s ease;
+  }
+
+  .hourly-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .hourly-time {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: white;
+    opacity: 0.8;
+    min-width: 35px;
+  }
+
+  .hourly-icon {
+    font-size: 1.4rem;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+  }
+
+  .hourly-details {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex: 1;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .hourly-temp, .hourly-feels, .hourly-rain {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .temp-label, .feels-label {
+    font-size: 0.7rem;
+    opacity: 0.6;
+    color: white;
+  }
+
+  .temp-value, .feels-value {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: white;
+  }
+
+  .rain-label {
+    font-size: 0.8rem;
+    opacity: 0.7;
+  }
+
+  .rain-value {
+    font-size: 0.85rem;
+    color: #66B2FF;
+    font-weight: 500;
+  }
+
+  .hourly-dust {
+    display: flex;
+    gap: 0.8rem;
+    align-items: center;
+  }
+
+  .dust-item {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .dust-label {
+    font-size: 0.65rem;
+    opacity: 0.5;
+    color: white;
+  }
+
+  .dust-value {
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.15rem 0.3rem;
+    border-radius: 4px;
+  }
+
+  .dust-value.good {
+    background: rgba(76, 175, 80, 0.2);
+    color: #4CAF50;
+  }
+
+  .dust-value.moderate {
+    background: rgba(255, 167, 38, 0.2);
+    color: #FFA726;
+  }
+
+  .dust-value.bad {
+    background: rgba(244, 67, 54, 0.2);
+    color: #F44336;
+  }
+
+  /* Scrollbar for hourly forecast list */
+  .hourly-forecast-list::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .hourly-forecast-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 2px;
+  }
+
+  .hourly-forecast-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+  }
+
+  .hourly-forecast-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.15);
   }
 
   .hour-card {
@@ -1199,148 +1245,6 @@
     color: #ff7043;
   }
 
-  /* 사이드바 시간별 보기 스타일 */
-  .sidebar-hourly-view {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .sidebar-hourly-header {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .back-button {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-    border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.3s;
-    font-size: 0.9rem;
-  }
-
-  .back-button:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: translateX(-2px);
-  }
-
-  .sidebar-hourly-header h3 {
-    font-size: 1rem;
-    font-weight: 500;
-    margin: 0;
-    opacity: 0.9;
-  }
-
-  .sidebar-hourly-list {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    padding-right: 0.5rem;
-  }
-
-  .sidebar-hourly-list::-webkit-scrollbar,
-  .five-day-list::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .sidebar-hourly-list::-webkit-scrollbar-track,
-  .five-day-list::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 3px;
-  }
-
-  .sidebar-hourly-list::-webkit-scrollbar-thumb,
-  .five-day-list::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 3px;
-  }
-
-  .sidebar-hourly-list::-webkit-scrollbar-thumb:hover,
-  .five-day-list::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.3);
-  }
-
-  .sidebar-hour-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.6rem;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 8px;
-    transition: all 0.3s;
-  }
-
-  .sidebar-hour-details {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 0.3rem;
-  }
-
-  .sidebar-precipitation {
-    font-size: 0.75rem;
-    color: #66B2FF;
-    opacity: 0.9;
-  }
-
-  .sidebar-hour-item:hover {
-    background: rgba(255, 255, 255, 0.08);
-    transform: translateX(3px);
-  }
-
-  .sidebar-hour-time {
-    font-size: 0.9rem;
-    font-weight: 500;
-    min-width: 60px;
-  }
-
-  .sidebar-hour-weather {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex: 1;
-    justify-content: center;
-  }
-
-  .sidebar-hour-icon {
-    font-size: 1.2rem;
-  }
-
-  .sidebar-hour-temp {
-    font-size: 0.9rem;
-    font-weight: 500;
-  }
-
-  .sidebar-hour-air {
-    display: flex;
-    flex-direction: column;
-    gap: 0.1rem;
-    text-align: right;
-    min-width: 80px;
-  }
-
-  .sidebar-pm-item {
-    font-size: 0.7rem;
-    opacity: 0.8;
-    padding: 0.1rem 0.3rem;
-    border-radius: 3px;
-    background: rgba(255, 255, 255, 0.05);
-  }
 
   /* Responsive */
   @media (max-width: 1024px) {
@@ -1360,14 +1264,9 @@
       max-height: none;
     }
 
-    .forecast-cards-container {
-      max-height: none;
-      overflow-y: visible;
-    }
-
-    .forecast-cards-grid {
+    .details-grid {
       grid-template-columns: 1fr;
-      gap: 1rem;
+      gap: 0.8rem;
     }
 
     .hourly {
@@ -1436,12 +1335,7 @@
       padding: 16px;
     }
 
-    .forecast-cards-container {
-      max-height: none;
-      overflow-y: visible;
-    }
-
-    .forecast-cards-grid {
+    .details-grid {
       grid-template-columns: 1fr;
       gap: 0.8rem;
     }
