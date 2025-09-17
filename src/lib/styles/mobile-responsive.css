@@ -1,0 +1,117 @@
+/* 모바일 시간별 날씨 반응형 CSS */
+
+/* 모바일 화면 - 세로 타임라인 레이아웃 */
+@media (max-width: 480px) {
+  .hourly-forecast {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+    max-height: 400px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+
+  .hour-wrapper {
+    width: 100% !important;
+    display: block !important;
+  }
+
+  .hour-item {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    padding: 1rem !important;
+    gap: 1rem !important;
+    min-width: unset !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-radius: 12px !important;
+  }
+
+  .hour-time-label {
+    flex: 0 0 60px !important;
+    margin-bottom: 0 !important;
+    font-size: 0.8rem !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-weight: 600 !important;
+  }
+
+  .hour-weather-section {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 1rem !important;
+    flex: 1 !important;
+  }
+
+  .hour-icon {
+    font-size: 1.8rem !important;
+    flex: 0 0 40px !important;
+    text-align: center !important;
+  }
+
+  .hour-temp {
+    font-size: 1.1rem !important;
+    font-weight: 600 !important;
+    flex: 0 0 60px !important;
+    text-align: center !important;
+  }
+
+  .hour-precip {
+    font-size: 0.8rem !important;
+    margin-left: auto !important;
+    flex: 0 0 70px !important;
+    text-align: right !important;
+  }
+
+  .hour-divider {
+    display: none !important;
+  }
+
+  .hour-air-quality {
+    display: none !important;
+  }
+
+  /* 첫 번째 아이템 (현재 시간) 강조 */
+  .hour-item:first-child {
+    background: rgba(79, 179, 217, 0.2) !important;
+    border-left: 4px solid rgba(79, 179, 217, 0.8) !important;
+    position: relative;
+  }
+
+  .hour-item:first-child::before {
+    content: '현재';
+    position: absolute;
+    top: 0.5rem;
+    left: 1rem;
+    font-size: 0.6rem;
+    color: rgba(79, 179, 217, 0.9);
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .hour-item:first-child .hour-time-label {
+    margin-top: 0.8rem;
+  }
+
+  /* 터치 피드백 */
+  .hour-item:active {
+    transform: scale(0.98);
+    background: rgba(255, 255, 255, 0.12) !important;
+  }
+
+  /* 스크롤바 스타일링 */
+  .hourly-forecast::-webkit-scrollbar {
+    width: 6px !important;
+    height: auto !important;
+  }
+
+  .hourly-forecast::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-radius: 3px !important;
+  }
+
+  .hourly-forecast::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3) !important;
+    border-radius: 3px !important;
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "915weather",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@sveltejs/adapter-auto": "^6.1.0",
+    "@sveltejs/kit": "^2.39.1",
+    "@sveltejs/vite-plugin-svelte": "^6.2.0",
+    "svelte": "^5.38.10",
+    "vite": "^7.1.5"
+  }
+}
