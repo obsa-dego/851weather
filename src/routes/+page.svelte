@@ -10,6 +10,7 @@
   let location = 'Gimpo, Korea';
   let showRainEffect = false;
   let currentWeatherCode = 0;
+  let greeting = '';
 
   // 5-day forecast data
   let fiveDayForecast = [];
@@ -20,9 +21,12 @@
   let airQualityData = []; // 미세먼지 데이터
 
   // Selected day for hourly forecast
+  let selectedDay = null;
   let selectedDayIndex = null;
   let selectedDayHourlyData = [];
-  let viewMode = 'list'; // 'list' or 'detail'
+  let showHourlyDetail = false;
+  let transitioning = false;
+  let currentPage = 0;
 
   // Location search
   let showLocationSearch = false;
@@ -43,6 +47,19 @@
 
   function updateDateTime() {
     const now = new Date();
+    const hour = now.getHours();
+
+    // Set greeting based on time
+    if (hour >= 5 && hour < 12) {
+      greeting = 'Good Morning';
+    } else if (hour >= 12 && hour < 17) {
+      greeting = 'Good Afternoon';
+    } else if (hour >= 17 && hour < 21) {
+      greeting = 'Good Evening';
+    } else {
+      greeting = 'Good Night';
+    }
+
     currentTime = now.toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
@@ -83,15 +100,16 @@
         if (Array.isArray(hourlyData)) {
           allHourlyData = hourlyData.map(h => ({
             time: formatTime(h.DateTime),
+            hour: formatTime(h.DateTime), // 'hour' 필드 추가
             temp: Math.round(h.Temperature?.Value || 0),
+            feelsLike: Math.round(h.RealFeelTemperature?.Value || h.Temperature?.Value || 0), // 체감온도 추가
             icon: getWeatherIcon(h.WeatherIcon),
             dateTime: h.DateTime,
             date: new Date(h.DateTime).toDateString(),
-            precipitation: h.PrecipitationProbability || 0
+            precipitation: h.PrecipitationProbability || 0,
+            pm10: 0, // 초기값
+            pm25: 0  // 초기값
           }));
-          console.log('🌤️ Weather data loaded:', allHourlyData.length, 'records');
-          console.log('🌤️ First weather record:', allHourlyData[0]);
-          console.log('🌤️ Sample weather times:', allHourlyData.slice(0, 5).map(h => h.dateTime));
 
           // 하단 섹션은 항상 오늘(0일차) 데이터로 고정
           updateHourlyForecastForDay(0);
@@ -104,22 +122,26 @@
         const airData = await airQualityResponse.json();
         if (Array.isArray(airData)) {
           airQualityData = airData;
-          console.log('🌫️ Air quality data loaded:', airQualityData.length, 'records');
-          console.log('🌫️ First air quality record:', airQualityData[0]);
-          console.log('🌫️ Sample air quality times:', airQualityData.slice(0, 5).map(a => a.DateTime));
 
-          // 미세먼지 데이터 로딩 완료 후 다시 매칭
-          if (allHourlyData.length > 0) {
-            console.log('🔄 Re-running hourly forecast update with air quality data...');
-            updateHourlyForecastForDay(0);
-
-            // 만약 상세 보기 중이었다면 데이터 다시 업데이트
-            if (selectedDayIndex !== null && viewMode === 'detail') {
-              updateSelectedDayHourlyForecast(selectedDayIndex);
-            }
+          // 미세먼지 데이터를 allHourlyData에 병합
+          if (allHourlyData.length > 0 && airQualityData.length > 0) {
+            allHourlyData = allHourlyData.map((hour, index) => {
+              const airDataForHour = airQualityData[index] || {};
+              return {
+                ...hour,
+                pm10: Math.round(airDataForHour.PM10 || 0),
+                pm25: Math.round(airDataForHour.PM25 || 0)
+              };
+            });
           }
-        } else {
-          console.error('❌ Air quality data is not an array:', airData);
+
+          // 하단 섹션 업데이트
+          updateHourlyForecastForDay(0);
+
+          // 만약 상세 보기 중이었다면 데이터 다시 업데이트
+          if (selectedDayIndex !== null && showHourlyDetail) {
+            updateSelectedDayHourlyForecast(selectedDayIndex);
+          }
         }
       }
 
@@ -196,18 +218,9 @@
       return itemDate.toDateString() === targetDateString;
     });
 
-    // 미세먼지 데이터와 결합 - 간단한 DateTime 매칭
-    console.log('🔄 Starting air quality matching...');
-    console.log('🔄 Day hourly data count:', dayHourlyData.length);
-    console.log('🔄 Air quality data count:', airQualityData.length);
-
+    // 미세먼지 데이터와 결합
     hourlyForecast = dayHourlyData.map((h, index) => {
       const airData = airQualityData.find(air => air.DateTime === h.dateTime);
-      if (airData) {
-        console.log(`✅ Match found for ${h.dateTime}: PM10=${airData.PM10}, PM25=${airData.PM25}`);
-      } else {
-        console.log(`❌ No match for ${h.dateTime}`);
-      }
       return {
         ...h,
         pm10: Math.round((airData?.PM10) || 0),
@@ -216,30 +229,48 @@
     });
   }
 
-
   // 날짜 선택 핸들러
   function selectDay(index) {
-    console.log('Selecting day:', index);
-    selectedDayIndex = index;
-    updateSelectedDayHourlyForecast(index);
-    viewMode = 'detail';
-    console.log('Selected day hourly data:', selectedDayHourlyData);
-  }
-
-  // 리스트 뷰로 돌아가기
-  function backToList() {
-    viewMode = 'list';
-    selectedDayIndex = null;
-    selectedDayHourlyData = [];
+    // selectedDayIndex = index; // 하단 섹션 변경하지 않도록 주석 처리
+    // updateSelectedDayHourlyForecast(index);
+    // showHourlyDetail = true;
+    // 주간 예보 섹션만 변경하는 로직
+    console.log("Day clicked:", index, "Current page:", currentPage);
+    if (selectedDay === index) {
+      // 같은 날짜 클릭 시 토글
+      transitioning = true;
+      setTimeout(() => {
+        selectedDay = null;
+        selectedDayHourlyData = null;
+        currentPage = 0;
+        transitioning = false;
+      }, 300);
+    } else {
+      transitioning = true;
+      // 선택된 날짜의 시간별 데이터 설정
+      if (allHourlyData && allHourlyData.length > 0) {
+        const startIndex = index * 24;
+        selectedDayHourlyData = allHourlyData.slice(startIndex, startIndex + 24);
+        console.log("Selected day hourly data sample:", selectedDayHourlyData.slice(0, 3)); // 디버깅용
+      } else {
+        // 데이터가 없을 때 빈 배열 사용
+        selectedDayHourlyData = [];
+        console.log("No hourly data available");
+      }
+      setTimeout(() => {
+        selectedDay = index;
+        currentPage = 1;
+        transitioning = false;
+      }, 300);
+    }
+    console.log("After click - Selected day:", selectedDay, "Page:", currentPage);
+    // This Week 섹션의 시각적 활성화를 위해 selectedDayIndex 설정
+    selectedDayIndex = selectedDay;
   }
 
   // 선택된 날짜의 시간별 예보 업데이트
   function updateSelectedDayHourlyForecast(dayIndex) {
-    console.log('Updating hourly forecast for day:', dayIndex);
-    console.log('All hourly data length:', allHourlyData.length);
-
     if (!allHourlyData.length) {
-      console.log('No hourly data available');
       return;
     }
 
@@ -247,15 +278,12 @@
     const targetDate = new Date(today);
     targetDate.setDate(today.getDate() + dayIndex);
     const targetDateString = targetDate.toDateString();
-    console.log('Target date:', targetDateString);
 
     // 해당 날짜의 24시간 데이터 필터링
     const dayHourlyData = allHourlyData.filter(h => {
       const itemDate = new Date(h.dateTime);
       return itemDate.toDateString() === targetDateString;
     });
-
-    console.log('Filtered hourly data count:', dayHourlyData.length);
 
     // 미세먼지 데이터와 결합
     selectedDayHourlyData = dayHourlyData.map(h => {
@@ -275,8 +303,6 @@
         icon: h.icon
       };
     });
-
-    console.log('Final selectedDayHourlyData:', selectedDayHourlyData);
   }
 
   // 지역 클릭 핸들러
@@ -312,7 +338,6 @@
       }
 
       const data = await response.json();
-      console.log('Nominatim API response:', data);
 
       // API 응답을 우리 형식으로 변환
       const locations = data.map(item => {
@@ -371,245 +396,234 @@
   }
 </script>
 
-<div class="weather-container">
-  <!-- Rain effect overlay -->
-  {#if showRainEffect}
-    <div class="rain-effect"></div>
-  {/if}
-
-  <!-- Main App Grid -->
-  <main class="app">
-    <!-- Current Weather Section -->
-    <section class="current">
-      <!-- Header -->
-      <header class="header">
-        <div class="date-time">
-          <div class="date">{currentDate}</div>
-          <div class="time">{currentTime}</div>
-        </div>
-      </header>
-
-      <!-- Main weather display -->
-      <div class="temperature-display">
-        <div class="location" on:click={openLocationSearch} role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && openLocationSearch()}>
-          <svg class="location-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-            <circle cx="12" cy="9" r="2.5"/>
-          </svg>
-          {location}
-          <svg class="edit-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-          </svg>
-        </div>
-        <div class="temp-value">{currentTemp}°C</div>
-        <div class="weather-status">{weatherCondition}</div>
-        <div class="wind-info">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/>
-          </svg>
-          <span>Northwest {windSpeed} km/h</span>
-        </div>
+<div class="weather-app">
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Left Section -->
+    <div class="left-section">
+      <div class="greeting-container">
+        <h1 class="greeting">{greeting}</h1>
+        <p class="subtitle">Get ready for your weather forecast 😎</p>
       </div>
-    </section>
 
-    <!-- Hourly Forecast Section -->
-    <section class="hourly">
-      <div class="hourly-track">
-        {#each hourlyForecast as hour}
-          <div class="hour-card">
-            <div class="hour-card-top">
-              <div class="hour-time">{hour.time}</div>
-              <div class="hour-icon">{hour.icon}</div>
-              <div class="hour-temp">{hour.temp}°C</div>
+      <!-- 3D Weather Visual -->
+      <div class="weather-visual">
+        {#if currentWeatherCode >= 61 && currentWeatherCode <= 99}
+          <div class="cloud-rain">
+            <div class="cloud"></div>
+            <div class="rain-drops">
+              <span></span><span></span><span></span><span></span><span></span>
             </div>
-            <div class="hour-card-bottom">
-              <div class="hour-precipitation">💧 {hour.precipitation}%</div>
-              <div class="hour-air-quality">
-                <div class="pm-value pm10">PM10: {hour.pm10}</div>
-                <div class="pm-value pm25">PM2.5: {hour.pm25}</div>
+          </div>
+        {:else if currentWeatherCode >= 3 && currentWeatherCode <= 48}
+          <div class="cloud-only">
+            <div class="cloud"></div>
+          </div>
+        {:else}
+          <div class="sun-cloud">
+            <div class="sun"></div>
+            <div class="small-cloud"></div>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Location Button -->
+      <button class="location-btn" on:click={openLocationSearch}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+          <circle cx="12" cy="9" r="2.5"/>
+        </svg>
+        {location}
+      </button>
+    </div>
+
+    <!-- Center Section - Temperature -->
+    <div class="center-section">
+      <div class="temperature-container">
+        <span class="temp-value">{currentTemp}</span>
+        <span class="temp-unit">°C</span>
+      </div>
+      <div class="weather-status">{weatherCondition}</div>
+      <div class="wind-info">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/>
+        </svg>
+        Wind {windSpeed} km/h
+      </div>
+    </div>
+
+    <!-- Right Section - Weekly Forecast -->
+    <div class="right-section">
+      <div class="weekly-header">
+        <h3>THIS WEEK</h3>
+        <span class="current-date">{currentDate}</span>
+      </div>
+
+      <div class="weekly-list" style="display: {selectedDay === null ? 'flex' : 'none'}">
+        {#each fiveDayForecast as day, index}
+          <button
+            class="day-card"
+            class:active={index === selectedDayIndex}
+            on:click={() => selectDay(index)}
+          >
+            <div class="day-left">
+              <span class="day-name">{index === 0 ? 'Today' : day.day}</span>
+              <span class="day-icon">{day.icon}</span>
+            </div>
+            <div class="day-right">
+              <span class="day-temp">{day.high}°</span>
+              <span class="day-temp-low">{day.low}°</span>
+              {#if day.precipitation > 30}
+                <span class="rain-badge">💧 {day.precipitation}%</span>
+              {/if}
+            </div>
+          </button>
+        {/each}
+      </div>
+
+      <!-- Weekly Hourly Detail Section -->
+
+      {#if selectedDay !== null && selectedDayHourlyData}
+        <div class="weekly-hourly-detail" class:visible={currentPage === 1}>
+          <div class="weekly-hourly-header">
+            <h4>시간별 예보</h4>
+            <button class="close-btn" on:click={() => {selectedDay = null; selectedDayIndex = null; currentPage = 0;}}>
+              ←
+            </button>
+          </div>
+          <div class="weekly-hourly-scroll">
+            {#each selectedDayHourlyData.slice(0, 8) as hour}
+              <div class="weekly-hour-item">
+                <div class="weekly-hour-time">{hour.hour || hour.time?.split(":")[0] + 'h' || '0h'}</div>
+                <div class="weekly-hour-data">
+                  <div class="data-row">
+                    <span class="data-label">기온:</span>
+                    <span class="data-value">{hour.temp || hour.temperature || 0}°C</span>
+                  </div>
+                  <div class="data-row">
+                    <span class="data-label">체감:</span>
+                    <span class="data-value">{hour.feelsLike || 0}°C</span>
+                  </div>
+                  <div class="data-row">
+                    <span class="data-label">강수:</span>
+                    <span class="data-value">{hour.precipitation || 0}mm</span>
+                  </div>
+                  <div class="data-row">
+                    <span class="data-label">PM10:</span>
+                    <span class="data-value">{hour.pm10 || 0}µg/m³</span>
+                  </div>
+                  <div class="data-row">
+                    <span class="data-label">PM2.5:</span>
+                    <span class="data-value">{hour.pm25 || 0}µg/m³</span>
+                  </div>
+                </div>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+    </div>
+  </div>
+
+  <!-- Bottom Section - Hourly Forecast -->
+  <div class="bottom-section">
+    <div class="hourly-header">
+      <h3>TODAY'S HOURLY</h3>
+      {#if showHourlyDetail && selectedDayIndex !== null}
+        <button class="back-btn" on:click={() => {showHourlyDetail = false; selectedDayIndex = null;}}>
+          Back to Today
+        </button>
+      {/if}
+    </div>
+
+    <div class="hourly-scroll">
+      {#if !showHourlyDetail}
+        <!-- Today's hourly forecast -->
+        {#each hourlyForecast.slice(0, 24) as hour}
+          <div class="hour-card">
+            <span class="hour-time">{hour.time}</span>
+            <span class="hour-icon">{hour.icon}</span>
+            <span class="hour-temp">{hour.temp}°</span>
+            {#if hour.precipitation > 0}
+              <span class="hour-rain">💧{hour.precipitation}%</span>
+            {/if}
+          </div>
+        {/each}
+      {:else}
+        <!-- Selected day's detailed hourly forecast -->
+        {#each selectedDayHourlyData as hour}
+          <div class="hour-detail-card">
+            <div class="hour-detail-time">{hour.hour}</div>
+            <div class="hour-detail-icon">{hour.icon}</div>
+            <div class="hour-detail-info">
+              <div class="info-row">
+                <span class="info-label">기온</span>
+                <span class="info-value">{hour.temp}°</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">체감</span>
+                <span class="info-value">{hour.feelsLike}°</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">강수</span>
+                <span class="info-value">{hour.precipitation}%</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">PM10</span>
+                <span class="info-value" class:good={hour.pm10 < 30} class:bad={hour.pm10 >= 80}>
+                  {hour.pm10}
+                </span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">PM2.5</span>
+                <span class="info-value" class:good={hour.pm25 < 15} class:bad={hour.pm25 >= 35}>
+                  {hour.pm25}
+                </span>
               </div>
             </div>
           </div>
         {/each}
-      </div>
-    </section>
-
-    <!-- Sidebar - Weekly Forecast -->
-    <aside class="sidebar">
-      <div class="weekly-section">
-        <div class="weekly-header">
-          <h2>주간 날씨</h2>
-          <div class="weekly-subtitle">5일간 예보</div>
-        </div>
-
-        <div class="weekly-content">
-          <div class="weekly-slider" style="transform: translateX({viewMode === 'detail' ? '-50%' : '0'})">
-            <!-- 주간 날씨 리스트 페이지 -->
-            <div class="weekly-page">
-              <div class="weekly-list">
-                {#each fiveDayForecast as day, index}
-                  <div
-                    class="day-item"
-                    class:today={index === 0}
-                    on:click={() => selectDay(index)}
-                    role="button"
-                    tabindex="0"
-                    on:keydown={(e) => e.key === 'Enter' && selectDay(index)}
-                  >
-                    <div class="day-info">
-                      <div class="day-name">{day.day}</div>
-                      <div class="day-date">{day.date}일</div>
-                    </div>
-
-                    <div class="day-weather">
-                      <div class="day-icon">{day.icon}</div>
-                      <div class="day-condition">{day.condition}</div>
-                    </div>
-
-                    <div class="day-temps">
-                      <div class="temp-high">{day.high}°</div>
-                      <div class="temp-low">{day.low}°</div>
-                    </div>
-
-                    <div class="day-rain">
-                      <span class="rain-icon">💧</span>
-                      <span class="rain-percent">{day.precipitation}%</span>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            </div>
-
-            <!-- 시간별 예보 상세 페이지 -->
-            <div class="weekly-page">
-              <div class="detail-header">
-                <button class="back-button" on:click={backToList}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="15 18 9 12 15 6"></polyline>
-                  </svg>
-                </button>
-                <h3>
-                  {#if selectedDayIndex !== null && fiveDayForecast[selectedDayIndex]}
-                    {fiveDayForecast[selectedDayIndex].day} {fiveDayForecast[selectedDayIndex].date}일
-                  {:else}
-                    시간별 예보
-                  {/if}
-                </h3>
-              </div>
-              <div class="hourly-forecast-list">
-                {#if selectedDayHourlyData.length > 0}
-                  {#each selectedDayHourlyData as hour}
-                    <div class="hourly-item">
-                      <div class="hourly-time">{hour.hour}</div>
-                      <div class="hourly-icon">{hour.icon}</div>
-                      <div class="hourly-details">
-                        <div class="hourly-temp">
-                          <span class="temp-label">기온</span>
-                          <span class="temp-value">{hour.temp}°</span>
-                        </div>
-                        <div class="hourly-feels">
-                          <span class="feels-label">체감</span>
-                          <span class="feels-value">{hour.feelsLike}°</span>
-                        </div>
-                        <div class="hourly-rain">
-                          <span class="rain-label">💧</span>
-                          <span class="rain-value">{hour.precipitation}%</span>
-                        </div>
-                        <div class="hourly-dust">
-                          <div class="dust-item">
-                            <span class="dust-label">PM10</span>
-                            <span class="dust-value" class:good={hour.pm10 < 30} class:moderate={hour.pm10 >= 30 && hour.pm10 < 80} class:bad={hour.pm10 >= 80}>
-                              {hour.pm10}
-                            </span>
-                          </div>
-                          <div class="dust-item">
-                            <span class="dust-label">PM2.5</span>
-                            <span class="dust-value" class:good={hour.pm25 < 15} class:moderate={hour.pm25 >= 15 && hour.pm25 < 35} class:bad={hour.pm25 >= 35}>
-                              {hour.pm25}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  {/each}
-                {:else}
-                  <div class="loading-placeholder">
-                    <span>데이터를 불러오는 중...</span>
-                  </div>
-                {/if}
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </aside>
-  </main>
+      {/if}
+    </div>
+  </div>
 
   <!-- Location Search Modal -->
   {#if showLocationSearch}
-    <div class="location-search-overlay" on:click={closeLocationSearch}>
-      <div class="location-search-modal" on:click|stopPropagation>
-        <div class="search-header">
-          <h3>지역 검색</h3>
-          <button class="close-button" on:click={closeLocationSearch}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
+    <div class="modal-overlay" on:click={closeLocationSearch}>
+      <div class="modal" on:click|stopPropagation>
+        <div class="modal-header">
+          <h3>Search Location</h3>
+          <button class="close-btn" on:click={closeLocationSearch}>×</button>
         </div>
 
-        <div class="search-input-container">
-          <button class="search-button" on:click={searchLocations} type="button">
-            <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <div class="search-container">
+          <input
+            type="text"
+            class="search-input"
+            placeholder="Enter city name..."
+            bind:value={searchQuery}
+            on:keydown={(e) => e.key === 'Enter' && searchLocations()}
+          />
+          <button class="search-btn" on:click={searchLocations}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"></circle>
               <path d="m21 21-4.35-4.35"></path>
             </svg>
           </button>
-          <input
-            type="text"
-            class="search-input"
-            placeholder="도시명을 입력하세요..."
-            bind:value={searchQuery}
-            on:keydown={(e) => e.key === 'Enter' && searchLocations()}
-            autocomplete="off"
-          />
-          {#if isSearching}
-            <div class="search-loading">검색 중...</div>
-          {/if}
         </div>
 
         <div class="search-results">
-          {#if searchResults.length > 0}
+          {#if isSearching}
+            <div class="searching">Searching...</div>
+          {:else if searchResults.length > 0}
             {#each searchResults as result}
-              <div
-                class="search-result-item"
-                on:click={() => selectLocation(result)}
-                role="button"
-                tabindex="0"
-                on:keydown={(e) => e.key === 'Enter' && selectLocation(result)}
-              >
-                <div class="result-main">
-                  <div class="result-name">{result.name}</div>
-                  <div class="result-full-name">{result.fullName}</div>
-                </div>
-                <svg class="result-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="9,18 15,12 9,6"></polyline>
-                </svg>
-              </div>
+              <button class="result-item" on:click={() => selectLocation(result)}>
+                <span class="result-name">{result.name}</span>
+                <span class="result-full">{result.fullName}</span>
+              </button>
             {/each}
-          {:else if searchQuery.trim() && !isSearching}
-            <div class="no-results">검색 결과가 없습니다.</div>
-          {:else if !searchQuery.trim()}
-            <div class="search-placeholder">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-                <circle cx="12" cy="9" r="2.5"/>
-              </svg>
-              <p>찾고 싶은 지역명을 입력해주세요</p>
-            </div>
+          {:else if searchQuery && !isSearching}
+            <div class="no-results">No results found</div>
           {/if}
         </div>
       </div>
@@ -621,1000 +635,820 @@
   :global(body) {
     margin: 0;
     padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   }
 
-  .weather-container {
+  .weather-app {
     min-height: 100vh;
-    background: linear-gradient(180deg, #0a1929 0%, #1e3a5f 100%);
-    color: white;
-    position: relative;
-    overflow: hidden;
-  }
-
-  /* Rain effect */
-  .rain-effect {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    pointer-events: none;
-    opacity: 0.3;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cline x1='50' y1='0' x2='50' y2='10' stroke='%23ffffff' stroke-width='0.5' opacity='0.5'/%3E%3C/svg%3E");
-    background-repeat: repeat;
-    background-size: 50px 100px;
-    animation: rain 1s linear infinite;
-  }
-
-  @keyframes rain {
-    0% {
-      transform: translateY(-100px);
-    }
-    100% {
-      transform: translateY(100px);
-    }
-  }
-
-  :root {
-    --gap: 12px;
-  }
-
-  .app {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) clamp(220px, 20vw, 300px);
-    grid-template-rows: auto auto;
-    grid-template-areas:
-      "current sidebar"
-      "hourly sidebar";
-    gap: var(--gap);
-    align-items: start;
-    padding: 4px 1px;
-    min-height: 100vh;
-    width: 98vw;
-    margin: 0 auto;
-  }
-
-  /* Section Areas */
-  .current {
-    grid-area: current;
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(6px);
-    border-radius: 12px;
-    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     display: flex;
     flex-direction: column;
-    gap: 20px;
-  }
-
-  .hourly {
-    grid-area: hourly;
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(6px);
-    border-radius: 12px;
-    padding: 20px;
-    overflow-x: auto;
-    overflow-y: visible;
-    min-height: 160px;
-  }
-
-  .sidebar {
-    grid-area: sidebar;
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(6px);
-    border-radius: 12px;
-    padding: 20px;
-    position: sticky;
-    top: 16px;
-    height: fit-content;
-    max-height: calc(100vh - 32px);
+    color: white;
     overflow: hidden;
   }
 
-  /* Header within current section */
-  .header {
-    display: flex;
-    justify-content: flex-start;
-    align-items: center;
-    padding: 16px 20px;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-  }
-
-  .date-time {
-    display: flex;
-    gap: 2rem;
+  .main-content {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr auto 300px;
+    gap: 60px;
+    padding: 40px 60px;
     align-items: center;
   }
 
-  .date {
+  /* Left Section */
+  .left-section {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+  }
+
+  .greeting-container {
+    animation: fadeInUp 0.6s ease-out;
+  }
+
+  .greeting {
+    font-size: 3.5rem;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.02em;
+  }
+
+  .subtitle {
     font-size: 1.1rem;
     opacity: 0.9;
+    margin: 10px 0 0 0;
   }
 
-  .time {
-    font-size: 1.1rem;
-    font-weight: 600;
+  /* 3D Weather Visual */
+  .weather-visual {
+    width: 250px;
+    height: 200px;
+    position: relative;
+    animation: float 3s ease-in-out infinite;
   }
 
-  .location {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    font-size: 1.3rem;
-    opacity: 0.9;
-    margin-bottom: 1.5rem;
-    cursor: pointer;
-    padding: 0.5rem 1rem;
-    border-radius: 12px;
-    transition: all 0.3s ease;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
   }
 
-  .location:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
-    transform: translateY(-1px);
+  .sun {
+    width: 120px;
+    height: 120px;
+    background: radial-gradient(circle, #FFD93D 0%, #FF6B6B 100%);
+    border-radius: 50%;
+    position: absolute;
+    top: 20px;
+    left: 100px;
+    box-shadow: 0 20px 40px rgba(255, 107, 107, 0.4);
+    animation: rotate 20s linear infinite;
   }
 
-  .location-icon {
-    opacity: 0.7;
+  @keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
-  .edit-icon {
-    opacity: 0.5;
-    transition: opacity 0.3s ease;
+  .cloud, .small-cloud {
+    background: linear-gradient(135deg, #ffffff 0%, #e8f4ff 100%);
+    border-radius: 100px;
+    position: absolute;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
   }
 
-  .location:hover .edit-icon {
+  .cloud {
+    width: 160px;
+    height: 60px;
+    top: 80px;
+    left: 20px;
+  }
+
+  .cloud::before, .cloud::after {
+    content: '';
+    background: linear-gradient(135deg, #ffffff 0%, #e8f4ff 100%);
+    position: absolute;
+    border-radius: 100px;
+  }
+
+  .cloud::before {
+    width: 80px;
+    height: 80px;
+    top: -40px;
+    left: 20px;
+  }
+
+  .cloud::after {
+    width: 60px;
+    height: 60px;
+    top: -30px;
+    right: 20px;
+  }
+
+  .small-cloud {
+    width: 80px;
+    height: 30px;
+    top: 40px;
+    left: 20px;
     opacity: 0.8;
   }
 
-  .temperature-display {
+  .cloud-rain .cloud, .cloud-only .cloud {
+    background: linear-gradient(135deg, #a8b8d8 0%, #8898c8 100%);
+  }
+
+  .cloud-rain .cloud::before, .cloud-rain .cloud::after,
+  .cloud-only .cloud::before, .cloud-only .cloud::after {
+    background: linear-gradient(135deg, #a8b8d8 0%, #8898c8 100%);
+  }
+
+  .rain-drops {
+    position: absolute;
+    top: 140px;
+    left: 40px;
+    display: flex;
+    gap: 15px;
+  }
+
+  .rain-drops span {
+    width: 3px;
+    height: 20px;
+    background: linear-gradient(to bottom, transparent, #4FC3F7);
+    border-radius: 10px;
+    animation: rain 1s linear infinite;
+  }
+
+  .rain-drops span:nth-child(2) { animation-delay: 0.2s; }
+  .rain-drops span:nth-child(3) { animation-delay: 0.4s; }
+  .rain-drops span:nth-child(4) { animation-delay: 0.6s; }
+  .rain-drops span:nth-child(5) { animation-delay: 0.8s; }
+
+  @keyframes rain {
+    0% { transform: translateY(0); opacity: 1; }
+    100% { transform: translateY(30px); opacity: 0; }
+  }
+
+  .location-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 30px;
+    color: white;
+    padding: 12px 20px;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: fit-content;
+  }
+
+  .location-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-2px);
+  }
+
+  /* Center Section */
+  .center-section {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1rem;
-    text-align: center;
-    flex: 1;
-    justify-content: center;
+    gap: 15px;
+    animation: fadeInUp 0.8s ease-out 0.2s both;
+  }
+
+  .temperature-container {
+    display: flex;
+    align-items: flex-start;
   }
 
   .temp-value {
-    font-size: 6rem;
-    font-weight: 300;
+    font-size: 8rem;
+    font-weight: 700;
     line-height: 1;
-    text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    text-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  }
+
+  .temp-unit {
+    font-size: 3rem;
+    font-weight: 400;
+    margin-top: 15px;
+    opacity: 0.8;
   }
 
   .weather-status {
-    font-size: 2.5rem;
-    font-weight: 300;
+    font-size: 1.3rem;
     opacity: 0.9;
-    letter-spacing: 2px;
+    text-align: center;
   }
 
   .wind-info {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    font-size: 1rem;
-    opacity: 0.7;
-    margin-top: 1rem;
-  }
-
-  /* Hourly Track */
-  .hourly-track {
-    display: grid;
-    grid-template-columns: repeat(12, 1fr);
-    grid-template-rows: repeat(2, 1fr);
     gap: 6px;
-    overflow: hidden;
-    padding-bottom: 8px;
+    font-size: 0.95rem;
+    opacity: 0.8;
   }
 
-  /* 주간 날씨 섹션 스타일 */
-  .weekly-section {
+  /* Right Section */
+  .right-section {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px);
+    border-radius: 30px;
+    padding: 30px 25px;
+    animation: fadeInUp 1s ease-out 0.4s both;
+    min-height: 450px;
+    height: 450px;
     display: flex;
     flex-direction: column;
-    height: 100%;
-  }
-
-  .weekly-content {
-    flex: 1;
-    overflow: hidden;
-    position: relative;
-  }
-
-  .weekly-slider {
-    display: flex;
-    width: 200%;
-    height: 100%;
-    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .weekly-page {
-    width: 50%;
-    height: 100%;
-    overflow-y: auto;
-    flex-shrink: 0;
   }
 
   .weekly-header {
-    text-align: center;
-    padding-bottom: 1rem;
-    margin-bottom: 1rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
   }
 
-  .weekly-header h2 {
-    font-size: 1.2rem;
-    font-weight: 600;
-    margin: 0 0 0.3rem 0;
-    color: white;
-    letter-spacing: -0.02em;
-  }
-
-  .weekly-subtitle {
+  .weekly-header h3 {
     font-size: 0.85rem;
-    opacity: 0.6;
-    font-weight: 400;
-    color: white;
+    letter-spacing: 0.1em;
+    margin: 0;
+    opacity: 0.9;
+  }
+
+  .current-date {
+    font-size: 0.8rem;
+    opacity: 0.7;
   }
 
   .weekly-list {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 12px;
     flex: 1;
     overflow-y: auto;
   }
 
-  .day-item {
+  .day-card {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 15px;
+    padding: 15px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: white;
+  }
+
+  .day-card:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateX(-5px);
+  }
+
+  .day-card.active {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+
+  .day-left {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 1rem;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    transition: all 0.3s ease;
-    gap: 1rem;
-    cursor: pointer;
-  }
-
-  .day-item:hover {
-    background: rgba(255, 255, 255, 0.06);
-    transform: translateX(-3px);
-    border-color: rgba(255, 255, 255, 0.1);
-  }
-
-  .day-item.today {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.15);
-  }
-
-
-  .day-info {
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-    min-width: 45px;
+    gap: 15px;
   }
 
   .day-name {
     font-size: 0.95rem;
-    font-weight: 600;
-    color: white;
-  }
-
-  .day-date {
-    font-size: 0.75rem;
-    opacity: 0.6;
-  }
-
-  .day-weather {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.3rem;
-    flex: 1;
-    text-align: center;
+    font-weight: 500;
+    min-width: 50px;
   }
 
   .day-icon {
-    font-size: 1.8rem;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+    font-size: 1.5rem;
   }
 
-  .day-condition {
-    font-size: 0.7rem;
-    opacity: 0.7;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 80px;
-  }
-
-  .day-temps {
+  .day-right {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 10px;
   }
 
-  .temp-high {
+  .day-temp {
     font-size: 1.1rem;
     font-weight: 600;
-    color: white;
   }
 
-  .temp-low {
+  .day-temp-low {
     font-size: 0.9rem;
     opacity: 0.6;
   }
 
-  .day-rain {
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
-    min-width: 45px;
-    justify-content: flex-end;
+  .rain-badge {
+    font-size: 0.75rem;
+    background: rgba(66, 165, 245, 0.3);
+    padding: 2px 6px;
+    border-radius: 10px;
   }
 
-  .rain-icon {
-    font-size: 0.9rem;
-    opacity: 0.7;
-  }
-
-  .rain-percent {
-    font-size: 0.85rem;
-    color: #66B2FF;
-    font-weight: 500;
-  }
-
-  /* Detail Header Styles */
-  .detail-header {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.5rem 1rem 1rem 1rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: 1rem;
-  }
-
-  .detail-header h3 {
+  /* Weekly Hourly Detail Section */
+  .weekly-hourly-detail {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 15px;
+    padding: 20px;
+    animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
     flex: 1;
-    text-align: center;
-    font-size: 1.1rem;
-    font-weight: 500;
-    color: white;
-    margin: 0;
-  }
-
-  .back-button {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    color: white;
-  }
-
-  .back-button:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
-    transform: translateX(-2px);
-  }
-
-  .loading-placeholder {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 200px;
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 0.9rem;
-  }
-
-  .hourly-forecast-list {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    padding: 0 0.5rem;
-    height: calc(100% - 70px);
-    overflow-y: auto;
+    overflow: hidden;
   }
 
-  .hourly-item {
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .weekly-hourly-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+  }
+
+  .weekly-hourly-header h4 {
+    margin: 0;
+    font-size: 0.9rem;
+    color: white;
+    opacity: 0.9;
+  }
+
+  .close-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.2rem;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+  }
+
+  .close-btn:hover {
+    opacity: 1;
+  }
+
+  .weekly-hourly-scroll {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto;
+    padding-right: 5px;
+    flex: 1;
+    max-height: 300px;
+  }
+
+  .weekly-hour-item {
     display: flex;
     align-items: center;
-    gap: 0.8rem;
-    padding: 0.8rem;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.04);
+    gap: 15px;
+    padding: 12px 15px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
     transition: all 0.3s ease;
   }
 
-  .hourly-item:hover {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.08);
+  .weekly-hour-item:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateX(3px);
   }
 
-  .hourly-time {
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: white;
-    opacity: 0.8;
-    min-width: 35px;
+  .weekly-hour-time {
+    font-size: 1rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    min-width: 50px;
   }
 
-  .hourly-icon {
-    font-size: 1.4rem;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
-  }
-
-  .hourly-details {
+  .weekly-hour-data {
     display: flex;
-    align-items: center;
-    gap: 1rem;
+    flex-direction: column;
+    gap: 4px;
     flex: 1;
-    justify-content: space-between;
-    flex-wrap: wrap;
   }
 
-  .hourly-temp, .hourly-feels, .hourly-rain {
+  .data-row {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 0.4rem;
+    font-size: 0.85rem;
   }
 
-  .temp-label, .feels-label {
-    font-size: 0.7rem;
-    opacity: 0.6;
-    color: white;
-  }
-
-  .temp-value, .feels-value {
-    font-size: 0.9rem;
+  .data-label {
+    color: rgba(255, 255, 255, 0.7);
     font-weight: 500;
-    color: white;
   }
 
-  .rain-label {
+  .data-value {
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    gap: 5px;
+    color: white;
+    animation: fadeInUp 0.4s ease forwards;
+  }
+
+  .weekly-hour-time {
     font-size: 0.8rem;
     opacity: 0.7;
   }
 
-  .rain-value {
+  .weekly-hour-icon {
+    font-size: 1.4rem;
+  }
+
+  .weekly-hour-temp {
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+
+  /* Bottom Section */
+  .bottom-section {
+    background: rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(10px);
+    padding: 25px 60px;
+    animation: fadeInUp 1.2s ease-out 0.6s both;
+  }
+
+  .hourly-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .hourly-header h3 {
     font-size: 0.85rem;
-    color: #66B2FF;
-    font-weight: 500;
+    letter-spacing: 0.1em;
+    margin: 0;
+    opacity: 0.9;
   }
 
-  .hourly-dust {
-    display: flex;
-    gap: 0.8rem;
-    align-items: center;
-  }
-
-  .dust-item {
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
-  }
-
-  .dust-label {
-    font-size: 0.65rem;
-    opacity: 0.5;
+  .back-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 20px;
     color: white;
+    padding: 8px 16px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
   }
 
-  .dust-value {
-    font-size: 0.75rem;
-    font-weight: 500;
-    padding: 0.15rem 0.3rem;
-    border-radius: 4px;
+  .back-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
   }
 
-  .dust-value.good {
-    background: rgba(76, 175, 80, 0.2);
-    color: #4CAF50;
+  .hourly-scroll {
+    display: flex;
+    gap: 15px;
+    overflow-x: auto;
+    padding-bottom: 15px;
   }
 
-  .dust-value.moderate {
-    background: rgba(255, 167, 38, 0.2);
-    color: #FFA726;
+  .hourly-scroll::-webkit-scrollbar {
+    height: 6px;
   }
 
-  .dust-value.bad {
-    background: rgba(244, 67, 54, 0.2);
-    color: #F44336;
-  }
-
-  /* Scrollbar for hourly forecast list */
-  .hourly-forecast-list::-webkit-scrollbar {
-    width: 4px;
-  }
-
-  .hourly-forecast-list::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 2px;
-  }
-
-  .hourly-forecast-list::-webkit-scrollbar-thumb {
+  .hourly-scroll::-webkit-scrollbar-track {
     background: rgba(255, 255, 255, 0.1);
-    border-radius: 2px;
+    border-radius: 10px;
   }
 
-  .hourly-forecast-list::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.15);
+  .hourly-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 10px;
   }
 
   .hour-card {
-    display: flex;
-    flex-direction: column;
-    width: 70px;
-    height: 130px;
-    padding: 6px;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 10px;
-    transition: all 0.3s;
-    justify-content: space-between;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-    flex-shrink: 0;
-  }
-
-  .hour-card-top {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    padding: 20px 25px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.3rem;
-    flex: 1;
-    justify-content: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    padding-bottom: 0.5rem;
-  }
-
-  .hour-card-bottom {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.3rem;
-    flex: 1;
-    justify-content: center;
-    padding-top: 0.5rem;
+    gap: 12px;
+    min-width: 80px;
+    transition: all 0.3s ease;
   }
 
   .hour-card:hover {
-    background: rgba(255, 255, 255, 0.08);
-    transform: translateY(-2px);
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateY(-5px);
   }
 
   .hour-time {
-    font-size: 0.7rem;
-    opacity: 0.7;
-    font-weight: 500;
+    font-size: 0.85rem;
+    opacity: 0.8;
   }
 
   .hour-icon {
-    font-size: 1.2rem;
+    font-size: 1.8rem;
   }
 
   .hour-temp {
-    font-size: 0.8rem;
-    font-weight: 500;
+    font-size: 1.1rem;
+    font-weight: 600;
   }
 
-  .hour-precipitation {
-    font-size: 0.6rem;
-    color: #66B2FF;
-    opacity: 0.9;
-    margin-bottom: 0.15rem;
+  .hour-rain {
+    font-size: 0.75rem;
+    opacity: 0.8;
   }
 
-  .hour-air-quality {
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
+  .hour-detail-card {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    padding: 20px;
+    min-width: 140px;
+    transition: all 0.3s ease;
+  }
+
+  .hour-detail-card:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateY(-5px);
+  }
+
+  .hour-detail-time {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 10px;
     text-align: center;
   }
 
-  .pm-value {
-    font-size: 0.6rem;
-    opacity: 0.8;
-    padding: 0.1rem 0.25rem;
-    border-radius: 3px;
-    background: rgba(255, 255, 255, 0.05);
-    line-height: 1.2;
+  .hour-detail-icon {
+    font-size: 2rem;
+    text-align: center;
+    margin-bottom: 15px;
   }
 
-  .pm-value.pm10 {
-    color: #ffa726;
+  .hour-detail-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
-  .pm-value.pm25 {
-    color: #ff7043;
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
   }
 
-
-  /* Responsive */
-  @media (max-width: 1024px) {
-    .app {
-      grid-template-columns: 1fr;
-      grid-template-rows: auto 2.5fr 0.4fr;
-      grid-template-areas:
-        "current"
-        "hourly"
-        "sidebar";
-      gap: calc(var(--gap) * 0.75);
-      min-height: 100vh;
-    }
-
-    .sidebar {
-      position: static;
-      max-height: none;
-    }
-
-    .details-grid {
-      grid-template-columns: 1fr;
-      gap: 0.8rem;
-    }
-
-    .hourly {
-      padding: 20px 20px;
-    }
-
-    .hourly-track {
-      display: grid;
-      grid-template-rows: repeat(2, 1fr);
-      grid-auto-flow: column;
-      grid-auto-columns: 100px;
-      overflow-x: auto;
-      overflow-y: hidden;
-      gap: 6px;
-      padding-bottom: 4px;
-    }
-
-    .hour-card {
-      width: 80px;
-      height: 120px;
-      padding: 4px 1px;
-    }
-
-    .temp-value {
-      font-size: 4rem;
-    }
-
-    .weather-status {
-      font-size: 2rem;
-    }
+  .info-label {
+    opacity: 0.7;
   }
 
-  @media (max-width: 768px) {
-    :root {
-      --gap: 8px;
-    }
-
-    .app {
-      padding: 4px 1px;
-      grid-template-rows: auto auto 1fr;
-      min-height: 100vh;
-    }
-
-    .header {
-      flex-direction: column;
-      gap: 0.5rem;
-      text-align: center;
-      padding: 12px 16px;
-    }
-
-    .date-time {
-      flex-direction: column;
-      gap: 0.25rem;
-    }
-
-    .temp-value {
-      font-size: 3.5rem;
-    }
-
-    .weather-status {
-      font-size: 1.5rem;
-    }
-
-    .sidebar {
-      max-height: none;
-      padding: 16px;
-    }
-
-    .details-grid {
-      grid-template-columns: 1fr;
-      gap: 0.8rem;
-    }
-
-    .hourly {
-      padding: 6px 16px;
-    }
-
-    .hourly-track {
-      display: grid;
-      grid-template-rows: repeat(2, 1fr);
-      grid-auto-flow: column;
-      grid-auto-columns: 90px;
-      overflow-x: auto;
-      overflow-y: hidden;
-      gap: 8px;
-      padding-bottom: 4px;
-    }
-
-    .hour-card {
-      width: 70px;
-      height: 110px;
-      padding: 6px;
-    }
-
-    .hour-time {
-      font-size: 0.7rem;
-    }
-
-    .hour-icon {
-      font-size: 1.2rem;
-    }
-
-    .hour-temp {
-      font-size: 0.8rem;
-    }
-
-    .pm-value {
-      font-size: 0.55rem;
-    }
+  .info-value {
+    font-weight: 500;
   }
 
-  /* Location Search Modal Styles */
-  .location-search-overlay {
+  .info-value.good {
+    color: #4CAF50;
+  }
+
+  .info-value.bad {
+    color: #FF5252;
+  }
+
+  /* Modal */
+  .modal-overlay {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
     background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
+    backdrop-filter: blur(10px);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
-    animation: overlayFadeIn 0.3s ease-out;
+    animation: fadeIn 0.3s ease;
   }
 
-  @keyframes overlayFadeIn {
+  .modal {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 30px;
+    padding: 30px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 70vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: slideUp 0.4s ease;
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+  }
+
+  .modal-header h3 {
+    margin: 0;
+    font-size: 1.3rem;
+  }
+
+  .close-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .close-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: rotate(90deg);
+  }
+
+  .search-container {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .search-input {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 15px;
+    color: white;
+    padding: 12px 20px;
+    font-size: 1rem;
+  }
+
+  .search-input::placeholder {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .search-btn {
+    background: rgba(255, 255, 255, 0.3);
+    border: none;
+    border-radius: 15px;
+    color: white;
+    padding: 0 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .search-btn:hover {
+    background: rgba(255, 255, 255, 0.4);
+  }
+
+  .search-results {
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .result-item {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 15px;
+    padding: 15px 20px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 100%;
+    text-align: left;
+    color: white;
+  }
+
+  .result-item:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateX(5px);
+  }
+
+  .result-name {
+    display: block;
+    font-size: 1rem;
+    font-weight: 500;
+    margin-bottom: 5px;
+  }
+
+  .result-full {
+    display: block;
+    font-size: 0.85rem;
+    opacity: 0.7;
+  }
+
+  .searching, .no-results {
+    text-align: center;
+    padding: 30px;
+    opacity: 0.7;
+  }
+
+  /* Animations */
+  @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
   }
 
-  .location-search-modal {
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
-    backdrop-filter: blur(20px);
-    border-radius: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    width: 90%;
-    max-width: 500px;
-    max-height: 80vh;
-    overflow: hidden;
-    animation: modalSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  }
-
-  @keyframes modalSlideIn {
+  @keyframes fadeInUp {
     from {
       opacity: 0;
-      transform: translateY(40px) scale(0.9);
+      transform: translateY(20px);
     }
     to {
       opacity: 1;
-      transform: translateY(0) scale(1);
+      transform: translateY(0);
     }
   }
 
-  .search-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem 2rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(50px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
-  .search-header h3 {
-    margin: 0;
-    color: white;
-    font-size: 1.3rem;
-    font-weight: 600;
+  /* Responsive */
+  @media (max-width: 1200px) {
+    .main-content {
+      grid-template-columns: 1fr;
+      gap: 40px;
+      padding: 30px;
+    }
+
+    .center-section {
+      order: -1;
+    }
+
+    .right-section {
+      width: 100%;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+
+    .greeting {
+      font-size: 2.5rem;
+    }
+
+    .temp-value {
+      font-size: 6rem;
+    }
+
+    .weather-visual {
+      width: 200px;
+      height: 150px;
+    }
+
+    .sun {
+      width: 80px;
+      height: 80px;
+    }
+
+    .cloud {
+      width: 120px;
+      height: 45px;
+    }
   }
 
-  .close-button {
-    background: rgba(255, 255, 255, 0.1);
-    border: none;
-    border-radius: 8px;
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    color: white;
-  }
+  @media (max-width: 768px) {
+    .main-content {
+      padding: 20px;
+    }
 
-  .close-button:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: scale(1.1);
-  }
+    .greeting {
+      font-size: 2rem;
+    }
 
-  .search-input-container {
-    position: relative;
-    padding: 1.5rem 2rem 1rem 2rem;
-  }
+    .temp-value {
+      font-size: 5rem;
+    }
 
-  .search-button {
-    position: absolute;
-    left: 1rem;
-    top: 50%;
-    transform: translateY(-50%);
-    background: rgba(255, 255, 255, 0.1);
-    border: none;
-    border-radius: 8px;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    z-index: 2;
-  }
-
-  .search-button:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: translateY(-50%) scale(1.1);
-  }
-
-  .search-icon {
-    color: rgba(255, 255, 255, 0.7);
-    transition: color 0.3s ease;
-  }
-
-  .search-button:hover .search-icon {
-    color: rgba(255, 255, 255, 0.9);
-  }
-
-  .search-input {
-    width: 100%;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 12px;
-    padding: 1rem 1rem 1rem 4rem;
-    color: white;
-    font-size: 1rem;
-    outline: none;
-    transition: all 0.3s ease;
-    box-sizing: border-box;
-  }
-
-  .search-input::placeholder {
-    color: rgba(255, 255, 255, 0.5);
-  }
-
-  .search-input:focus {
-    border-color: rgba(255, 255, 255, 0.3);
-    background: rgba(255, 255, 255, 0.12);
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
-  }
-
-  .search-loading {
-    position: absolute;
-    right: 3rem;
-    top: 50%;
-    transform: translateY(-50%);
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 0.9rem;
-  }
-
-  .search-results {
-    max-height: 400px;
-    overflow-y: auto;
-    padding: 0 1rem 1.5rem 1rem;
-  }
-
-  .search-result-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1rem 1.5rem;
-    margin: 0.5rem;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-  }
-
-  .search-result-item:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.15);
-    transform: translateX(4px);
-  }
-
-  .result-main {
-    flex: 1;
-  }
-
-  .result-name {
-    color: white;
-    font-size: 1.1rem;
-    font-weight: 600;
-    margin-bottom: 0.2rem;
-  }
-
-  .result-full-name {
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 0.9rem;
-  }
-
-  .result-arrow {
-    color: rgba(255, 255, 255, 0.4);
-    transition: all 0.3s ease;
-  }
-
-  .search-result-item:hover .result-arrow {
-    color: rgba(255, 255, 255, 0.8);
-    transform: translateX(4px);
-  }
-
-  .no-results {
-    text-align: center;
-    padding: 2rem;
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 1rem;
-  }
-
-  .search-placeholder {
-    text-align: center;
-    padding: 3rem 2rem;
-    color: rgba(255, 255, 255, 0.5);
-  }
-
-  .search-placeholder svg {
-    opacity: 0.3;
-    margin-bottom: 1rem;
-  }
-
-  .search-placeholder p {
-    margin: 0;
-    font-size: 1rem;
-  }
-
-  .search-results::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .search-results::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 3px;
-  }
-
-  .search-results::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 3px;
-  }
-
-  .search-results::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.3);
+    .bottom-section {
+      padding: 20px;
+    }
   }
 </style>
