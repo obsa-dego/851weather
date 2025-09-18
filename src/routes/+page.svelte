@@ -12,8 +12,8 @@
   let location = 'Gimpo, Korea';
   let currentWeatherCode = 0;
 
-  // 5-day forecast data
-  let fiveDayForecast = [];
+  // 7-day forecast data
+  let sevenDayForecast = [];
 
   // Hourly forecast data
   let hourlyForecast = [];
@@ -30,13 +30,36 @@
   let locationKey = '37.6_126.70001';
   let activeView = 'overview'; // overview, hourly, weekly
 
+  // Language State
+  let showLanguageDropdown = false;
+  let supportedLanguages = [
+    { code: 'ko', name: '한국어', flag: '🇰🇷' },
+    { code: 'ja', name: '日本語', flag: '🇯🇵' },
+    { code: 'en', name: 'English', flag: '🇺🇸' },
+    { code: 'pt', name: 'Português', flag: '🇧🇷' }
+  ];
+  let selectedLanguage = supportedLanguages[0]; // Default to Korean
+
   onMount(() => {
     updateDateTime();
     const interval = setInterval(updateDateTime, 1000);
     loadWeatherData();
 
+    // Load saved language preference
+    const savedLanguage = localStorage.getItem('preferred-language');
+    if (savedLanguage) {
+      const languageOption = supportedLanguages.find(lang => lang.code === savedLanguage);
+      if (languageOption) {
+        selectedLanguage = languageOption;
+      }
+    }
+
+    // Add click outside listener for language dropdown
+    document.addEventListener('click', handleClickOutside);
+
     return () => {
       clearInterval(interval);
+      document.removeEventListener('click', handleClickOutside);
     };
   });
 
@@ -72,16 +95,17 @@
         }
       }
 
-      // Hourly forecast (120 hours)
-      const hourlyResponse = await fetch(`/api/weather/openmeteo-forecast?locationKey=${locationKey}&type=hourly&hours=120`);
+      // Hourly forecast (168 hours for 7 days)
+      const hourlyResponse = await fetch(`/api/weather/openmeteo-forecast?locationKey=${locationKey}&type=hourly&hours=168`);
       if (hourlyResponse.ok) {
         const hourlyData = await hourlyResponse.json();
         if (Array.isArray(hourlyData)) {
+          console.log('Hourly Data Sample:', hourlyData[0]);
           allHourlyData = hourlyData.map(h => ({
             time: formatTime(h.DateTime),
             hour: formatTime(h.DateTime),
             temp: Math.round(h.Temperature?.Value || 0),
-            feelsLike: Math.round(h.RealFeelTemperature?.Value || h.Temperature?.Value || 0),
+            feelsLike: Math.round(h.ApparentTemperature?.Value || h.Temperature?.Value || 0),
             icon: getWeatherIcon(h.WeatherIcon),
             dateTime: h.DateTime,
             date: new Date(h.DateTime).toDateString(),
@@ -94,12 +118,13 @@
         }
       }
 
-      // Air quality data
-      const airQualityResponse = await fetch(`/api/weather/openmeteo-airquality?locationKey=${locationKey}&type=hourly&hours=120`);
+      // Air quality data (168 hours for 7 days)
+      const airQualityResponse = await fetch(`/api/weather/openmeteo-airquality?locationKey=${locationKey}&type=hourly&hours=168`);
       if (airQualityResponse.ok) {
         const airData = await airQualityResponse.json();
         if (Array.isArray(airData)) {
           airQualityData = airData;
+          console.log('Air Quality Data Sample:', airQualityData[0]);
 
           if (allHourlyData.length > 0 && airQualityData.length > 0) {
             allHourlyData = allHourlyData.map((hour, index) => {
@@ -113,15 +138,16 @@
           }
 
           updateHourlyForecastForDay(0);
+          console.log('Final Hourly Forecast Sample:', hourlyForecast[0]);
         }
       }
 
-      // Daily forecast
-      const dailyResponse = await fetch(`/api/weather/openmeteo-forecast?locationKey=${locationKey}&type=daily&days=5`);
+      // Daily forecast (7 days)
+      const dailyResponse = await fetch(`/api/weather/openmeteo-forecast?locationKey=${locationKey}&type=daily&days=7`);
       if (dailyResponse.ok) {
         const dailyData = await dailyResponse.json();
         if (dailyData && dailyData.DailyForecasts) {
-          fiveDayForecast = dailyData.DailyForecasts.map((d, index) => {
+          sevenDayForecast = dailyData.DailyForecasts.map((d, index) => {
             const date = new Date(d.Date);
             const dayName = index === 0 ? 'Today' : date.toLocaleDateString('en-US', { weekday: 'short' });
             return {
@@ -196,6 +222,25 @@
     showLocationSearch = false;
     searchQuery = '';
     searchResults = [];
+  }
+
+  // Language functions
+  function toggleLanguageDropdown() {
+    showLanguageDropdown = !showLanguageDropdown;
+  }
+
+  function selectLanguage(language) {
+    selectedLanguage = language;
+    showLanguageDropdown = false;
+    // Store preference in localStorage
+    localStorage.setItem('preferred-language', language.code);
+  }
+
+  // Close dropdown when clicking outside
+  function handleClickOutside(event) {
+    if (!event.target.closest('.language-dropdown')) {
+      showLanguageDropdown = false;
+    }
   }
 
   async function searchLocations() {
@@ -280,6 +325,11 @@
   <!-- Header -->
   <header class="app-header">
     <div class="header-left">
+      <div class="current-date">{currentDate}</div>
+      <div class="current-time">{currentTime}</div>
+    </div>
+
+    <div class="header-center">
       <button class="location-button" on:click={openLocationSearch}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
@@ -289,12 +339,51 @@
       </button>
     </div>
 
-    <div class="header-center">
-      <div class="current-date">{currentDate}</div>
-      <div class="current-time">{currentTime}</div>
-    </div>
-
     <div class="header-right">
+      <!-- Language Dropdown -->
+      <div class="language-dropdown" class:open={showLanguageDropdown}>
+        <button class="language-button" on:click={toggleLanguageDropdown}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+          <span>{selectedLanguage.name}</span>
+          <svg
+            class="dropdown-arrow"
+            class:rotated={showLanguageDropdown}
+            width="12" height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+
+        {#if showLanguageDropdown}
+          <div class="language-menu" in:fly={{y: -10, duration: 200}} out:fly={{y: -10, duration: 150}}>
+            {#each supportedLanguages as language, i}
+              <button
+                class="language-option"
+                class:selected={selectedLanguage.code === language.code}
+                on:click={() => selectLanguage(language)}
+                in:fly={{y: -10, delay: i * 50, duration: 200}}
+              >
+                <span class="language-flag">{language.flag}</span>
+                <span class="language-name">{language.name}</span>
+                {#if selectedLanguage.code === language.code}
+                  <svg class="check-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 6L9 17l-5-5"/>
+                  </svg>
+                {/if}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      <!-- View Tabs -->
       <nav class="view-tabs">
         <button
           class="tab-button"
@@ -397,12 +486,10 @@
                     </div>
                   </div>
 
-                  {#if hour.precipitation > 0}
-                    <div class="precipitation-info">
-                      <span class="precip-label">Rain</span>
-                      <span class="precip-value">{hour.precipitation}%</span>
-                    </div>
-                  {/if}
+                  <div class="precipitation-info">
+                    <span class="precip-label">Rain</span>
+                    <span class="precip-value">{hour.precipitation}%</span>
+                  </div>
 
                   <div class="air-info">
                     <div class="air-metric">
@@ -420,11 +507,11 @@
           </div>
         </div>
 
-        <!-- 5 Day Preview -->
+        <!-- 7 Day Preview -->
         <div class="week-preview">
-          <h3 class="section-title">Next 5 Days</h3>
+          <h3 class="section-title">Next 7 Days</h3>
           <div class="days-grid">
-            {#each fiveDayForecast as day, i}
+            {#each sevenDayForecast as day, i}
               <button
                 class="day-preview-card"
                 class:today={i === 0}
@@ -451,7 +538,7 @@
       <div class="hourly-view" in:fade={{duration: 300, easing: cubicOut}}>
         <!-- Day Selector -->
         <div class="day-selector">
-          {#each fiveDayForecast as day, i}
+          {#each sevenDayForecast as day, i}
             <button
               class="day-tab"
               class:active={selectedDay === i}
@@ -512,7 +599,7 @@
       <!-- Weekly View -->
       <div class="weekly-view" in:fade={{duration: 300, easing: cubicOut}}>
         <div class="week-cards">
-          {#each fiveDayForecast as day, i}
+          {#each sevenDayForecast as day, i}
             <div class="week-day-card" in:scale={{delay: i * 100, duration: 400}}>
               <div class="week-day-header">
                 <h3 class="week-day-name">{day.day}</h3>
@@ -649,14 +736,31 @@
     background: rgba(255, 255, 255, 0.03);
     backdrop-filter: blur(10px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    z-index: 10000;
   }
 
   .header-left, .header-right {
     flex: 1;
+    display: flex;
+    align-items: center;
+  }
+
+  .header-left {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
   }
 
   .header-center {
-    text-align: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .header-right {
+    justify-content: flex-end;
+    gap: 1.5rem;
   }
 
   .location-button {
@@ -1392,6 +1496,117 @@
     }
   }
 
+  /* Language Dropdown */
+  .language-dropdown {
+    position: relative;
+    z-index: 9999;
+  }
+
+  .language-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.75rem;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(10px);
+  }
+
+  .language-button:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+  }
+
+  .language-button.open {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .dropdown-arrow {
+    transition: transform 0.2s ease;
+  }
+
+  .dropdown-arrow.rotated {
+    transform: rotate(180deg);
+  }
+
+  .language-menu {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    min-width: 180px;
+    background: rgba(20, 20, 20, 0.95);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    padding: 0.5rem;
+    z-index: 9999;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  }
+
+  .language-option {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.75rem;
+    background: transparent;
+    border: none;
+    border-radius: 0.5rem;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+  }
+
+  .language-option:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.95);
+    transform: translateX(2px);
+  }
+
+  .language-option.selected {
+    background: rgba(56, 189, 248, 0.1);
+    color: rgba(56, 189, 248, 1);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+  }
+
+  .language-flag {
+    font-size: 1.1rem;
+    min-width: 1.2rem;
+  }
+
+  .language-name {
+    flex: 1;
+    font-weight: 500;
+  }
+
+  .check-icon {
+    width: 16px;
+    height: 16px;
+    color: rgba(56, 189, 248, 1);
+  }
+
+  /* Current Date/Time in header left */
+  .current-date {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .current-time {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.6);
+  }
+
   /* Responsive */
   @media (max-width: 768px) {
     .app-header {
@@ -1402,10 +1617,33 @@
 
     .header-left, .header-center, .header-right {
       width: 100%;
+      justify-content: center;
+    }
+
+    .header-left {
+      align-items: center;
+      order: 2;
+    }
+
+    .header-center {
+      order: 1;
+      margin-bottom: 0.5rem;
+    }
+
+    .header-right {
+      order: 3;
+      flex-direction: column;
+      gap: 1rem;
     }
 
     .view-tabs {
       justify-content: center;
+    }
+
+    .language-menu {
+      left: 50%;
+      transform: translateX(-50%);
+      right: auto;
     }
 
     .main-content {
