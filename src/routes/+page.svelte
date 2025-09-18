@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { fade, fly, scale } from 'svelte/transition';
-  import { cubicInOut } from 'svelte/easing';
+  import { cubicOut } from 'svelte/easing';
 
   // State variables
   let currentTime = '';
@@ -10,42 +10,30 @@
   let weatherCondition = 'Loading...';
   let windSpeed = 0;
   let location = 'Gimpo, Korea';
-  let showRainEffect = false;
   let currentWeatherCode = 0;
-  let greeting = '';
 
   // 5-day forecast data
   let fiveDayForecast = [];
 
-  // Hourly forecast data (24시간)
+  // Hourly forecast data
   let hourlyForecast = [];
-  let allHourlyData = []; // 5일간의 모든 시간별 데이터
-  let airQualityData = []; // 미세먼지 데이터
+  let allHourlyData = [];
+  let airQualityData = [];
 
-  // Selected day for hourly forecast
-  let selectedDay = null;
-  let selectedDayIndex = null;
-  let selectedDayHourlyData = [];
-  let showHourlyDetail = false;
-  let transitioning = false;
-  let currentPage = 0;
-
-  // Location search
+  // UI State
+  let selectedDay = 0;
   let showLocationSearch = false;
   let searchQuery = '';
   let searchResults = [];
   let isSearching = false;
-
-  // API data loading
   let loading = true;
   let locationKey = '37.6_126.70001';
+  let activeView = 'overview'; // overview, hourly, weekly
 
   onMount(() => {
     updateDateTime();
     const interval = setInterval(updateDateTime, 1000);
     loadWeatherData();
-
-    // CSS flexbox order로 순서 제어 - DOM 조작 제거
 
     return () => {
       clearInterval(interval);
@@ -54,28 +42,17 @@
 
   function updateDateTime() {
     const now = new Date();
-    const hour = now.getHours();
-
-    // Set greeting based on time
-    if (hour >= 5 && hour < 12) {
-      greeting = 'Good Morning';
-    } else if (hour >= 12 && hour < 17) {
-      greeting = 'Good Afternoon';
-    } else if (hour >= 17 && hour < 21) {
-      greeting = 'Good Evening';
-    } else {
-      greeting = 'Good Night';
-    }
 
     currentTime = now.toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false
     });
+
     currentDate = now.toLocaleDateString('en-US', {
-      day: 'numeric',
+      weekday: 'long',
       month: 'long',
-      year: 'numeric'
+      day: 'numeric'
     });
   }
 
@@ -86,51 +63,44 @@
       const currentResponse = await fetch(`/api/weather/openmeteo-current?locationKey=${locationKey}`);
       if (currentResponse.ok) {
         const currentData = await currentResponse.json();
-        // API returns an array with one object
         if (currentData && currentData[0]) {
           const current = currentData[0];
           currentTemp = Math.round(current.Temperature.Metric.Value);
-          weatherCondition = current.WeatherText; // Already in Korean from API
+          weatherCondition = current.WeatherText;
           windSpeed = Math.round(current.Wind?.Speed?.Metric?.Value || 0);
           currentWeatherCode = current.WeatherIcon || 0;
-
-          // Show rain effect for rain-related weather codes
-          showRainEffect = shouldShowRain(currentWeatherCode);
         }
       }
 
-      // 5일간의 시간별 데이터 가져오기 (120시간)
+      // Hourly forecast (120 hours)
       const hourlyResponse = await fetch(`/api/weather/openmeteo-forecast?locationKey=${locationKey}&type=hourly&hours=120`);
       if (hourlyResponse.ok) {
         const hourlyData = await hourlyResponse.json();
-        // API returns an array directly
         if (Array.isArray(hourlyData)) {
           allHourlyData = hourlyData.map(h => ({
             time: formatTime(h.DateTime),
-            hour: formatTime(h.DateTime), // 'hour' 필드 추가
+            hour: formatTime(h.DateTime),
             temp: Math.round(h.Temperature?.Value || 0),
-            feelsLike: Math.round(h.RealFeelTemperature?.Value || h.Temperature?.Value || 0), // 체감온도 추가
+            feelsLike: Math.round(h.RealFeelTemperature?.Value || h.Temperature?.Value || 0),
             icon: getWeatherIcon(h.WeatherIcon),
             dateTime: h.DateTime,
             date: new Date(h.DateTime).toDateString(),
             precipitation: h.PrecipitationProbability || 0,
-            pm10: 0, // 초기값
-            pm25: 0  // 초기값
+            pm10: 0,
+            pm25: 0
           }));
 
-          // 하단 섹션은 항상 오늘(0일차) 데이터로 고정
           updateHourlyForecastForDay(0);
         }
       }
 
-      // 미세먼지 데이터 가져오기 (120시간)
+      // Air quality data
       const airQualityResponse = await fetch(`/api/weather/openmeteo-airquality?locationKey=${locationKey}&type=hourly&hours=120`);
       if (airQualityResponse.ok) {
         const airData = await airQualityResponse.json();
         if (Array.isArray(airData)) {
           airQualityData = airData;
 
-          // 미세먼지 데이터를 allHourlyData에 병합
           if (allHourlyData.length > 0 && airQualityData.length > 0) {
             allHourlyData = allHourlyData.map((hour, index) => {
               const airDataForHour = airQualityData[index] || {};
@@ -142,13 +112,7 @@
             });
           }
 
-          // 하단 섹션 업데이트
           updateHourlyForecastForDay(0);
-
-          // 만약 상세 보기 중이었다면 데이터 다시 업데이트
-          if (selectedDayIndex !== null && showHourlyDetail) {
-            updateSelectedDayHourlyForecast(selectedDayIndex);
-          }
         }
       }
 
@@ -156,13 +120,10 @@
       const dailyResponse = await fetch(`/api/weather/openmeteo-forecast?locationKey=${locationKey}&type=daily&days=5`);
       if (dailyResponse.ok) {
         const dailyData = await dailyResponse.json();
-        // API returns object with DailyForecasts array
         if (dailyData && dailyData.DailyForecasts) {
-          fiveDayForecast = dailyData.DailyForecasts.map(d => {
+          fiveDayForecast = dailyData.DailyForecasts.map((d, index) => {
             const date = new Date(d.Date);
-            const dayName = date.toLocaleDateString('ko-KR', {
-              weekday: 'short'
-            });
+            const dayName = index === 0 ? 'Today' : date.toLocaleDateString('en-US', { weekday: 'short' });
             return {
               day: dayName,
               date: date.getDate(),
@@ -182,34 +143,25 @@
     }
   }
 
-  // WMO Weather Code to emoji icon mapping
   function getWeatherIcon(code) {
-    if (code === 0 || code === 1) return '☀️'; // Clear/Sunny
-    if (code === 2) return '⛅'; // Partly cloudy
-    if (code === 3) return '☁️'; // Overcast
-    if (code >= 45 && code <= 48) return '🌫️'; // Fog
-    if (code >= 51 && code <= 57) return '🌦️'; // Drizzle
-    if (code >= 61 && code <= 67) return '🌧️'; // Rain
-    if (code >= 71 && code <= 77) return '🌨️'; // Snow
-    if (code >= 80 && code <= 82) return '🌧️'; // Rain showers
-    if (code >= 85 && code <= 86) return '❄️'; // Snow showers
-    if (code >= 95 && code <= 99) return '⛈️'; // Thunderstorm
-    return '☁️'; // Default
+    if (code === 0 || code === 1) return '☀️';
+    if (code === 2) return '⛅';
+    if (code === 3) return '☁️';
+    if (code >= 45 && code <= 48) return '🌫️';
+    if (code >= 51 && code <= 57) return '🌦️';
+    if (code >= 61 && code <= 67) return '🌧️';
+    if (code >= 71 && code <= 77) return '🌨️';
+    if (code >= 80 && code <= 82) return '🌧️';
+    if (code >= 85 && code <= 86) return '❄️';
+    if (code >= 95 && code <= 99) return '⛈️';
+    return '☁️';
   }
 
-  // Determine if rain effect should be shown based on weather code
-  function shouldShowRain(code) {
-    // Show rain for drizzle, rain, rain showers, and thunderstorms
-    return (code >= 51 && code <= 67) || (code >= 80 && code <= 82) || (code >= 95 && code <= 99);
-  }
-
-  // 시간 형식 변환
   function formatTime(dateString) {
     const date = new Date(dateString);
     return date.getHours().toString().padStart(2, '0') + ':00';
   }
 
-  // 선택된 날짜의 24시간 데이터 업데이트
   function updateHourlyForecastForDay(dayIndex) {
     if (!allHourlyData.length) return;
 
@@ -219,14 +171,12 @@
 
     const targetDateString = targetDate.toDateString();
 
-    // 해당 날짜의 24시간 데이터 필터링
     const dayHourlyData = allHourlyData.filter(h => {
       const itemDate = new Date(h.dateTime);
       return itemDate.toDateString() === targetDateString;
     });
 
-    // 미세먼지 데이터와 결합
-    hourlyForecast = dayHourlyData.map((h, index) => {
+    hourlyForecast = dayHourlyData.map((h) => {
       const airData = airQualityData.find(air => air.DateTime === h.dateTime);
       return {
         ...h,
@@ -236,82 +186,18 @@
     });
   }
 
-  // 날짜 선택 핸들러
-  function selectDay(index) {
-    console.log("Day clicked:", index);
-
-    if (selectedDay === index) {
-      // 같은 날짜 클릭 시 토글
-      selectedDay = null;
-      selectedDayHourlyData = null;
-      selectedDayIndex = null;
-    } else {
-      // 선택된 날짜의 시간별 데이터 설정
-      if (allHourlyData && allHourlyData.length > 0) {
-        const startIndex = index * 24;
-        selectedDayHourlyData = allHourlyData.slice(startIndex, startIndex + 24);
-        console.log("Selected day hourly data sample:", selectedDayHourlyData.slice(0, 3));
-      } else {
-        selectedDayHourlyData = [];
-        console.log("No hourly data available");
-      }
-      selectedDay = index;
-      selectedDayIndex = index;
-    }
-  }
-
-  // 선택된 날짜의 시간별 예보 업데이트
-  function updateSelectedDayHourlyForecast(dayIndex) {
-    if (!allHourlyData.length) {
-      return;
-    }
-
-    const today = new Date();
-    const targetDate = new Date(today);
-    targetDate.setDate(today.getDate() + dayIndex);
-    const targetDateString = targetDate.toDateString();
-
-    // 해당 날짜의 24시간 데이터 필터링
-    const dayHourlyData = allHourlyData.filter(h => {
-      const itemDate = new Date(h.dateTime);
-      return itemDate.toDateString() === targetDateString;
-    });
-
-    // 미세먼지 데이터와 결합
-    selectedDayHourlyData = dayHourlyData.map(h => {
-      const airData = airQualityData.find(air => air.DateTime === h.dateTime);
-      const hour = new Date(h.dateTime).getHours();
-
-      // 체감온도 간단 계산 (실제 계산식은 더 복잡함)
-      const feelsLike = h.temp - (h.precipitation > 50 ? 2 : 0);
-
-      return {
-        hour: `${hour.toString().padStart(2, '0')}시`,
-        temp: h.temp,
-        feelsLike: Math.round(feelsLike),
-        precipitation: h.precipitation,
-        pm10: airData?.PM10 ? Math.round(airData.PM10) : 0,
-        pm25: airData?.PM25 ? Math.round(airData.PM25) : 0,
-        icon: h.icon
-      };
-    });
-  }
-
-  // 지역 클릭 핸들러
   function openLocationSearch() {
     showLocationSearch = true;
     searchQuery = '';
     searchResults = [];
   }
 
-  // 검색 모달 닫기
   function closeLocationSearch() {
     showLocationSearch = false;
     searchQuery = '';
     searchResults = [];
   }
 
-  // 지역 검색 함수 (실제 API 사용)
   async function searchLocations() {
     if (!searchQuery.trim()) {
       searchResults = [];
@@ -320,7 +206,6 @@
 
     isSearching = true;
     try {
-      // OpenStreetMap Nominatim API 사용
       const encodedQuery = encodeURIComponent(searchQuery);
       const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodedQuery}&format=json&countrycodes=kr&limit=10&addressdetails=1&accept-language=ko`;
 
@@ -331,18 +216,15 @@
 
       const data = await response.json();
 
-      // API 응답을 우리 형식으로 변환
       const locations = data.map(item => {
         const lat = parseFloat(item.lat);
         const lon = parseFloat(item.lon);
         const coordinates = `${lat}_${lon}`;
 
-        // 지역명 추출 (한국어 우선)
         let name = '';
         let fullName = item.display_name;
 
         if (item.address) {
-          // 시/군/구 이름 추출
           name = item.address.city ||
                  item.address.town ||
                  item.address.county ||
@@ -350,7 +232,6 @@
                  item.address.municipality ||
                  searchQuery;
         } else {
-          // display_name에서 첫 번째 부분 추출
           name = item.display_name.split(',')[0];
         }
 
@@ -361,12 +242,11 @@
         };
       });
 
-      // 중복 제거 (같은 좌표의 결과)
       const uniqueLocations = locations.filter((location, index, self) =>
         index === self.findIndex(l => l.coordinates === location.coordinates)
       );
 
-      searchResults = uniqueLocations.slice(0, 8); // 최대 8개 결과만 표시
+      searchResults = uniqueLocations.slice(0, 8);
     } catch (error) {
       console.error('Location search error:', error);
       searchResults = [];
@@ -375,220 +255,316 @@
     }
   }
 
-  // 지역 선택 함수
   async function selectLocation(selectedLocation) {
-    location = selectedLocation.fullName;
+    location = selectedLocation.name;
     locationKey = selectedLocation.coordinates;
 
-    // 모달 닫기
     closeLocationSearch();
-
-    // 새로운 지역의 날씨 데이터 로드
     await loadWeatherData();
+  }
+
+  function getAirQualityStatus(pm10, pm25) {
+    if (pm10 <= 30 && pm25 <= 15) return { text: 'Good', color: '#4ade80' };
+    if (pm10 <= 80 && pm25 <= 35) return { text: 'Moderate', color: '#fbbf24' };
+    if (pm10 <= 150 && pm25 <= 75) return { text: 'Unhealthy', color: '#fb923c' };
+    return { text: 'Very Unhealthy', color: '#ef4444' };
+  }
+
+  function selectDay(index) {
+    selectedDay = index;
+    updateHourlyForecastForDay(index);
   }
 </script>
 
 <div class="weather-app">
-  <!-- Main Content -->
-  <div class="main-content">
-    <!-- Left Section -->
-    <div class="left-section">
-      <div class="greeting-container">
-        <h1 class="greeting">{greeting}</h1>
-        <p class="subtitle">Get ready for your weather forecast 😎</p>
-      </div>
-
-      <!-- 3D Weather Visual -->
-      <div class="weather-visual">
-        {#if currentWeatherCode >= 61 && currentWeatherCode <= 99}
-          <div class="cloud-rain">
-            <div class="cloud"></div>
-            <div class="rain-drops">
-              <span></span><span></span><span></span><span></span><span></span>
-            </div>
-          </div>
-        {:else if currentWeatherCode >= 3 && currentWeatherCode <= 48}
-          <div class="cloud-only">
-            <div class="cloud"></div>
-          </div>
-        {:else}
-          <div class="sun-cloud">
-            <div class="sun"></div>
-            <div class="small-cloud"></div>
-          </div>
-        {/if}
-      </div>
-
-      <!-- Location Button -->
-      <button class="location-btn" on:click={openLocationSearch}>
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <button class="location-button" on:click={openLocationSearch}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
           <circle cx="12" cy="9" r="2.5"/>
         </svg>
-        {location}
+        <span>{location}</span>
       </button>
     </div>
 
-    <!-- Center Section - Temperature -->
-    <div class="center-section">
-      <div class="temperature-container">
-        <span class="temp-value">{currentTemp}</span>
-        <span class="temp-unit">°C</span>
-      </div>
-      <div class="weather-status">{weatherCondition}</div>
-      <div class="wind-info">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/>
-        </svg>
-        Wind {windSpeed} km/h
-      </div>
+    <div class="header-center">
+      <div class="current-date">{currentDate}</div>
+      <div class="current-time">{currentTime}</div>
     </div>
 
-    <!-- Bottom Section - Hourly Forecast (DOM 순서: 모바일에서 위에 오도록) -->
-    <div class="bottom-section">
-      <div class="hourly-header">
-        <h3>TODAY'S HOURLY</h3>
-        {#if showHourlyDetail && selectedDayIndex !== null}
-          <button class="back-btn" on:click={() => {showHourlyDetail = false; selectedDayIndex = null;}}>
-            Back to Today
-          </button>
-        {/if}
-      </div>
+    <div class="header-right">
+      <nav class="view-tabs">
+        <button
+          class="tab-button"
+          class:active={activeView === 'overview'}
+          on:click={() => activeView = 'overview'}
+        >
+          Overview
+        </button>
+        <button
+          class="tab-button"
+          class:active={activeView === 'hourly'}
+          on:click={() => activeView = 'hourly'}
+        >
+          Hourly
+        </button>
+        <button
+          class="tab-button"
+          class:active={activeView === 'weekly'}
+          on:click={() => activeView = 'weekly'}
+        >
+          Weekly
+        </button>
+      </nav>
+    </div>
+  </header>
 
-      {#if !showHourlyDetail}
-        <!-- Today Hourly -->
-        <div class="hourly-scroll">
-          {#each hourlyForecast.slice(0, 24) as hour, i}
-            <div class="hour-card" in:fly={{x: -20, delay: Math.min(i * 50, 400), duration: 300, easing: cubicInOut}}>
-              <div class="hour-time">{hour.time}</div>
-              <div class="hour-temp">{hour.temp}°</div>
-              <div class="hour-icon">{hour.icon}</div>
-              {#if hour.precipitation > 0}
-                <div class="hour-rain">💧{hour.precipitation}%</div>
-              {/if}
+  <!-- Main Content -->
+  <main class="main-content">
+    {#if activeView === 'overview'}
+      <!-- Overview View -->
+      <div class="overview-view" in:fade={{duration: 300, easing: cubicOut}}>
+        <!-- Current Weather Card -->
+        <div class="current-weather-card">
+          <div class="weather-main">
+            <div class="temp-display">
+              <span class="temp-value">{currentTemp}</span>
+              <span class="temp-unit">°</span>
             </div>
-          {/each}
-        </div>
-      {:else}
-        <!-- Hourly Detail -->
-        <div class="hourly-detail-container">
-          {#each selectedDayHourlyData as hour, i}
-            <div class="hour-detail-card" in:fly={{y: 20, delay: Math.min(i * 30, 300), duration: 300, easing: cubicInOut}}>
-              <div class="detail-time">{hour.hour || hour.time?.split(":")[0] + 'h' || '0h'}</div>
-              <div class="detail-info">
-                <div class="info-row">
-                  <span>기온:</span>
-                  <span>{hour.temp || hour.temperature || 0}°C</span>
+            <div class="weather-info">
+              <div class="weather-condition">{weatherCondition}</div>
+              <div class="weather-details">
+                <span class="detail-item">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/>
+                  </svg>
+                  {windSpeed} km/h
+                </span>
+                {#if hourlyForecast[0]}
+                  <span class="detail-item">
+                    💧 {hourlyForecast[0].precipitation}%
+                  </span>
+                {/if}
+              </div>
+            </div>
+          </div>
+
+          <!-- Air Quality -->
+          {#if hourlyForecast[0]}
+            {@const airStatus = getAirQualityStatus(hourlyForecast[0].pm10, hourlyForecast[0].pm25)}
+            <div class="air-quality-section">
+              <h3 class="section-title">Air Quality</h3>
+              <div class="air-quality-card">
+                <div class="air-status" style="color: {airStatus.color}">
+                  {airStatus.text}
                 </div>
-                <div class="info-row">
-                  <span>체감:</span>
-                  <span>{hour.feelsLike || 0}°C</span>
-                </div>
-                <div class="info-row">
-                  <span>강수:</span>
-                  <span>{hour.precipitation || 0}mm</span>
-                </div>
-                <div class="info-row">
-                  <span>PM10:</span>
-                  <span>{hour.pm10 || 0}µg/m³</span>
+                <div class="air-values">
+                  <div class="air-item">
+                    <span class="air-label">PM10</span>
+                    <span class="air-value">{hourlyForecast[0].pm10}</span>
+                  </div>
+                  <div class="air-item">
+                    <span class="air-label">PM2.5</span>
+                    <span class="air-value">{hourlyForecast[0].pm25}</span>
+                  </div>
                 </div>
               </div>
             </div>
-          {/each}
+          {/if}
         </div>
-      {/if}
-    </div>
 
-    <!-- Right Section - Weekly Forecast -->
-    <div class="right-section">
-      <!-- Dynamic Header -->
-      <div class="weekly-header">
-        {#if selectedDay === null}
-          <div class="header-content" in:fade={{duration: 300, easing: cubicInOut}}>
-            <h3>THIS WEEK</h3>
-            <span class="current-date">{currentDate}</span>
-          </div>
-        {:else}
-          <div class="header-content selected" in:fade={{duration: 300, easing: cubicInOut}}>
-            <button class="back-btn" on:click={() => {selectedDay = null; selectedDayIndex = null;}}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <h3>{fiveDayForecast[selectedDay]?.day === '토' || fiveDayForecast[selectedDay]?.day === '일' ? fiveDayForecast[selectedDay]?.day + '요일' : selectedDay === 0 ? '오늘' : fiveDayForecast[selectedDay]?.day + '요일'}</h3>
-            <span class="selected-date">{fiveDayForecast[selectedDay]?.date}일</span>
-          </div>
-        {/if}
-      </div>
-
-      <!-- Content Area with Transitions -->
-      <div class="weekly-content">
-        {#if selectedDay === null}
-          <!-- Weekly List -->
-          <div class="weekly-list"
-               in:fly={{y: 20, duration: 400, easing: cubicInOut}}
-               out:fly={{y: -20, duration: 300, easing: cubicInOut}}>
-            {#each fiveDayForecast as day, index}
-              <button
-                class="day-card"
-                class:active={index === selectedDayIndex}
-                on:click={() => selectDay(index)}
-              >
-                <div class="day-left">
-                  <span class="day-name">{index === 0 ? 'Today' : day.day}</span>
-                  <span class="day-icon">{day.icon}</span>
+        <!-- Today's Hourly Preview -->
+        <div class="today-hourly">
+          <h3 class="section-title">Today's Forecast</h3>
+          <div class="hourly-preview-detailed">
+            {#each hourlyForecast as hour, i}
+              <div class="hour-detail-card-overview" in:fly={{y: 20, delay: i * 20, duration: 300}}>
+                <div class="hour-header">
+                  <span class="hour-time-label">{hour.time}</span>
+                  <span class="hour-weather-icon">{hour.icon}</span>
                 </div>
-                <div class="day-right">
-                  <span class="day-temp">{day.high}°</span>
-                  <span class="day-temp-low">{day.low}°</span>
-                  {#if day.precipitation > 30}
-                    <span class="rain-badge">💧 {day.precipitation}%</span>
+                <div class="hour-body">
+                  <div class="temp-info">
+                    <div class="actual-temp">
+                      <span class="temp-label">Temp</span>
+                      <span class="temp-val">{hour.temp}°</span>
+                    </div>
+                    <div class="feels-temp">
+                      <span class="temp-label">Feels</span>
+                      <span class="temp-val">{hour.feelsLike}°</span>
+                    </div>
+                  </div>
+
+                  {#if hour.precipitation > 0}
+                    <div class="precipitation-info">
+                      <span class="precip-label">Rain</span>
+                      <span class="precip-value">{hour.precipitation}%</span>
+                    </div>
                   {/if}
-                </div>
-              </button>
-            {/each}
-          </div>
-        {:else if selectedDayHourlyData}
-          <!-- Hourly Detail -->
-          <div class="weekly-hourly-detail"
-               in:fly={{y: 20, duration: 400, easing: cubicInOut}}
-               out:fly={{y: -20, duration: 300, easing: cubicInOut}}>
-            <div class="weekly-hourly-scroll">
-              {#each selectedDayHourlyData as hour, i}
-                <div class="weekly-hour-item"
-                     in:fly={{y: 10, delay: Math.min(i * 30, 300), duration: 300, easing: cubicInOut}}>
-                  <div class="weekly-hour-time">{hour.hour || hour.time?.split(":")[0] + 'h' || '0h'}</div>
-                  <div class="weekly-hour-data">
-                    <div class="data-row">
-                      <span class="data-label">기온:</span>
-                      <span class="data-value">{hour.temp || hour.temperature || 0}°C</span>
+
+                  <div class="air-info">
+                    <div class="air-metric">
+                      <span class="metric-label">PM10</span>
+                      <span class="metric-value">{hour.pm10}</span>
                     </div>
-                    <div class="data-row">
-                      <span class="data-label">체감:</span>
-                      <span class="data-value">{hour.feelsLike || 0}°C</span>
-                    </div>
-                    <div class="data-row">
-                      <span class="data-label">강수:</span>
-                      <span class="data-value">{hour.precipitation || 0}mm</span>
-                    </div>
-                    <div class="data-row">
-                      <span class="data-label">PM10:</span>
-                      <span class="data-value">{hour.pm10 || 0}µg/m³</span>
-                    </div>
-                    <div class="data-row">
-                      <span class="data-label">PM2.5:</span>
-                      <span class="data-value">{hour.pm25 || 0}µg/m³</span>
+                    <div class="air-metric">
+                      <span class="metric-label">PM2.5</span>
+                      <span class="metric-value">{hour.pm25}</span>
                     </div>
                   </div>
                 </div>
-              {/each}
-            </div>
+              </div>
+            {/each}
           </div>
-        {/if}
-      </div>
-    </div>
-  </div>
+        </div>
 
+        <!-- 5 Day Preview -->
+        <div class="week-preview">
+          <h3 class="section-title">Next 5 Days</h3>
+          <div class="days-grid">
+            {#each fiveDayForecast as day, i}
+              <button
+                class="day-preview-card"
+                class:today={i === 0}
+                on:click={() => {selectDay(i); activeView = 'hourly';}}
+                in:scale={{delay: i * 50, duration: 300}}
+              >
+                <div class="day-name">{day.day}</div>
+                <div class="day-icon">{day.icon}</div>
+                <div class="day-temps">
+                  <span class="temp-high">{day.high}°</span>
+                  <span class="temp-low">{day.low}°</span>
+                </div>
+                {#if day.precipitation > 30}
+                  <div class="day-rain">💧{day.precipitation}%</div>
+                {/if}
+              </button>
+            {/each}
+          </div>
+        </div>
+      </div>
+
+    {:else if activeView === 'hourly'}
+      <!-- Hourly View -->
+      <div class="hourly-view" in:fade={{duration: 300, easing: cubicOut}}>
+        <!-- Day Selector -->
+        <div class="day-selector">
+          {#each fiveDayForecast as day, i}
+            <button
+              class="day-tab"
+              class:active={selectedDay === i}
+              on:click={() => selectDay(i)}
+            >
+              {day.day}
+              <span class="day-date">{day.date}</span>
+            </button>
+          {/each}
+        </div>
+
+        <!-- Hourly Details -->
+        <div class="hourly-details">
+          <div class="hourly-grid">
+            {#each hourlyForecast as hour, i}
+              <div class="hour-detail-card" in:fly={{y: 20, delay: i * 20, duration: 300}}>
+                <div class="hour-header">
+                  <span class="hour-time-label">{hour.time}</span>
+                  <span class="hour-weather-icon">{hour.icon}</span>
+                </div>
+                <div class="hour-body">
+                  <div class="temp-info">
+                    <div class="actual-temp">
+                      <span class="temp-label">Temp</span>
+                      <span class="temp-val">{hour.temp}°</span>
+                    </div>
+                    <div class="feels-temp">
+                      <span class="temp-label">Feels</span>
+                      <span class="temp-val">{hour.feelsLike}°</span>
+                    </div>
+                  </div>
+
+                  {#if hour.precipitation > 0}
+                    <div class="precipitation-info">
+                      <span class="precip-label">Rain</span>
+                      <span class="precip-value">{hour.precipitation}%</span>
+                    </div>
+                  {/if}
+
+                  <div class="air-info">
+                    <div class="air-metric">
+                      <span class="metric-label">PM10</span>
+                      <span class="metric-value">{hour.pm10}</span>
+                    </div>
+                    <div class="air-metric">
+                      <span class="metric-label">PM2.5</span>
+                      <span class="metric-value">{hour.pm25}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            {/each}
+          </div>
+        </div>
+      </div>
+
+    {:else if activeView === 'weekly'}
+      <!-- Weekly View -->
+      <div class="weekly-view" in:fade={{duration: 300, easing: cubicOut}}>
+        <div class="week-cards">
+          {#each fiveDayForecast as day, i}
+            <div class="week-day-card" in:scale={{delay: i * 100, duration: 400}}>
+              <div class="week-day-header">
+                <h3 class="week-day-name">{day.day}</h3>
+                <span class="week-day-date">{currentDate.split(' ')[0]} {day.date}</span>
+              </div>
+
+              <div class="week-day-weather">
+                <div class="week-weather-icon">{day.icon}</div>
+                <div class="week-weather-text">{day.condition}</div>
+              </div>
+
+              <div class="week-day-temps">
+                <div class="temp-range">
+                  <div class="temp-item">
+                    <span class="temp-type">High</span>
+                    <span class="temp-number">{day.high}°</span>
+                  </div>
+                  <div class="temp-divider"></div>
+                  <div class="temp-item">
+                    <span class="temp-type">Low</span>
+                    <span class="temp-number">{day.low}°</span>
+                  </div>
+                </div>
+              </div>
+
+              {#if day.precipitation > 0}
+                <div class="week-day-rain">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M16 13V11C16 8.24 13.76 6 11 6S6 8.24 6 11V13"/>
+                    <path d="M12 13V21"/>
+                    <path d="M8 17L8 21"/>
+                    <path d="M16 17L16 21"/>
+                  </svg>
+                  <span>{day.precipitation}% chance of rain</span>
+                </div>
+              {/if}
+
+              <button
+                class="view-hourly-btn"
+                on:click={() => {selectDay(i); activeView = 'hourly';}}
+              >
+                View Hourly
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9 18L15 12L9 6"/>
+                </svg>
+              </button>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+  </main>
 
   <!-- Location Search Modal -->
   {#if showLocationSearch}
@@ -596,33 +572,37 @@
       <div class="modal" on:click|stopPropagation>
         <div class="modal-header">
           <h3>Search Location</h3>
-          <button class="close-btn" on:click={closeLocationSearch}>×</button>
+          <button class="modal-close" on:click={closeLocationSearch}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6L18 18"/>
+            </svg>
+          </button>
         </div>
 
-        <div class="search-container">
+        <div class="search-box">
           <input
             type="text"
             class="search-input"
-            placeholder="Enter city name..."
+            placeholder="Search city..."
             bind:value={searchQuery}
             on:keydown={(e) => e.key === 'Enter' && searchLocations()}
           />
-          <button class="search-btn" on:click={searchLocations}>
+          <button class="search-button" on:click={searchLocations}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"></circle>
-              <path d="m21 21-4.35-4.35"></path>
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.35-4.35"/>
             </svg>
           </button>
         </div>
 
         <div class="search-results">
           {#if isSearching}
-            <div class="searching">Searching...</div>
+            <div class="search-loading">Searching...</div>
           {:else if searchResults.length > 0}
             {#each searchResults as result}
-              <button class="result-item" on:click={() => selectLocation(result)}>
-                <span class="result-name">{result.name}</span>
-                <span class="result-full">{result.fullName}</span>
+              <button class="location-result" on:click={() => selectLocation(result)}>
+                <span class="location-name">{result.name}</span>
+                <span class="location-full">{result.fullName}</span>
               </button>
             {/each}
           {:else if searchQuery && !isSearching}
@@ -635,687 +615,617 @@
 </div>
 
 <style>
-  :global(body) {
+  :global(html), :global(body) {
     margin: 0;
     padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  }
-
-  .weather-app {
-    min-height: 100vh;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    display: flex;
-    flex-direction: column;
-    color: white;
+    height: 100%;
     overflow: hidden;
   }
 
-  /* PC 기본 레이아웃 */
+  :global(body) {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif;
+    background: #0a0a0a;
+    color: #ffffff;
+  }
+
+  :global(*) {
+    box-sizing: border-box;
+  }
+
+  .weather-app {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, #0a0a0a 0%, #1a1a1a 100%);
+    overflow: hidden;
+  }
+
+  /* Header */
+  .app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 2rem;
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .header-left, .header-right {
+    flex: 1;
+  }
+
+  .header-center {
+    text-align: center;
+  }
+
+  .location-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1.25rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 2rem;
+    color: #ffffff;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .location-button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .current-date {
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 0.25rem;
+  }
+
+  .current-time {
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+  }
+
+  .view-tabs {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+  }
+
+  .tab-button {
+    padding: 0.625rem 1.25rem;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 2rem;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .tab-button:hover {
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .tab-button.active {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Main Content */
   .main-content {
     flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 2rem;
+  }
+
+  /* Scrollbar styling */
+  .main-content::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .main-content::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .main-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+  }
+
+  /* Overview View */
+  .overview-view {
+    max-width: 1400px;
+    margin: 0 auto;
     display: grid;
-    grid-template-columns: 1fr auto 300px;
-    grid-template-rows: auto auto;
-    grid-template-areas:
-      "left center right"
-      "bottom bottom bottom";
-    gap: 60px;
-    padding: 40px 60px;
-    align-items: start;
+    gap: 2rem;
   }
 
-  .left-section { grid-area: left; }
-  .center-section { grid-area: center; }
-  .right-section { grid-area: right; }
-  .bottom-section { grid-area: bottom; }
-
-  /* Left Section */
-  .left-section {
-    display: flex;
-    flex-direction: column;
-    gap: 30px;
+  .current-weather-card {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1.5rem;
+    padding: 2.5rem;
   }
 
-  .greeting-container {
-    animation: fadeInUp 0.6s ease-out;
-  }
-
-  .greeting {
-    font-size: 3.5rem;
-    font-weight: 700;
-    margin: 0;
-    letter-spacing: -0.02em;
-  }
-
-  .subtitle {
-    font-size: 1.1rem;
-    opacity: 0.9;
-    margin: 10px 0 0 0;
-  }
-
-  /* 3D Weather Visual */
-  .weather-visual {
-    width: 250px;
-    height: 200px;
-    position: relative;
-    animation: float 3s ease-in-out infinite;
-  }
-
-  @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-  }
-
-  .sun {
-    width: 120px;
-    height: 120px;
-    background: radial-gradient(circle, #FFD93D 0%, #FF6B6B 100%);
-    border-radius: 50%;
-    position: absolute;
-    top: 20px;
-    left: 100px;
-    box-shadow: 0 20px 40px rgba(255, 107, 107, 0.4);
-    animation: rotate 20s linear infinite;
-  }
-
-  @keyframes rotate {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-
-  .cloud, .small-cloud {
-    background: linear-gradient(135deg, #ffffff 0%, #e8f4ff 100%);
-    border-radius: 100px;
-    position: absolute;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-  }
-
-  .cloud {
-    width: 160px;
-    height: 60px;
-    top: 80px;
-    left: 20px;
-  }
-
-  .cloud::before, .cloud::after {
-    content: '';
-    background: linear-gradient(135deg, #ffffff 0%, #e8f4ff 100%);
-    position: absolute;
-    border-radius: 100px;
-  }
-
-  .cloud::before {
-    width: 80px;
-    height: 80px;
-    top: -40px;
-    left: 20px;
-  }
-
-  .cloud::after {
-    width: 60px;
-    height: 60px;
-    top: -30px;
-    right: 20px;
-  }
-
-  .small-cloud {
-    width: 80px;
-    height: 30px;
-    top: 40px;
-    left: 20px;
-    opacity: 0.8;
-  }
-
-  .cloud-rain .cloud, .cloud-only .cloud {
-    background: linear-gradient(135deg, #a8b8d8 0%, #8898c8 100%);
-  }
-
-  .cloud-rain .cloud::before, .cloud-rain .cloud::after,
-  .cloud-only .cloud::before, .cloud-only .cloud::after {
-    background: linear-gradient(135deg, #a8b8d8 0%, #8898c8 100%);
-  }
-
-  .rain-drops {
-    position: absolute;
-    top: 140px;
-    left: 40px;
-    display: flex;
-    gap: 15px;
-  }
-
-  .rain-drops span {
-    width: 3px;
-    height: 20px;
-    background: linear-gradient(to bottom, transparent, #4FC3F7);
-    border-radius: 10px;
-    animation: rain 1s linear infinite;
-  }
-
-  .rain-drops span:nth-child(2) { animation-delay: 0.2s; }
-  .rain-drops span:nth-child(3) { animation-delay: 0.4s; }
-  .rain-drops span:nth-child(4) { animation-delay: 0.6s; }
-  .rain-drops span:nth-child(5) { animation-delay: 0.8s; }
-
-  @keyframes rain {
-    0% { transform: translateY(0); opacity: 1; }
-    100% { transform: translateY(30px); opacity: 0; }
-  }
-
-  .location-btn {
-    background: rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 30px;
-    color: white;
-    padding: 12px 20px;
-    font-size: 0.95rem;
+  .weather-main {
     display: flex;
     align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    width: fit-content;
+    gap: 3rem;
+    margin-bottom: 2rem;
   }
 
-  .location-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
-    transform: translateY(-2px);
-  }
-
-  /* Center Section */
-  .center-section {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 15px;
-    animation: fadeInUp 0.8s ease-out 0.2s both;
-  }
-
-  .temperature-container {
+  .temp-display {
     display: flex;
     align-items: flex-start;
+    line-height: 1;
   }
 
   .temp-value {
-    font-size: 8rem;
-    font-weight: 700;
-    line-height: 1;
-    text-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    font-size: 6rem;
+    font-weight: 200;
+    letter-spacing: -0.05em;
   }
 
   .temp-unit {
     font-size: 3rem;
-    font-weight: 400;
-    margin-top: 15px;
-    opacity: 0.8;
+    font-weight: 200;
+    margin-top: 0.5rem;
+    opacity: 0.5;
   }
 
-  .weather-status {
-    font-size: 1.3rem;
-    opacity: 0.9;
-    text-align: center;
+  .weather-info {
+    flex: 1;
   }
 
-  .wind-info {
+  .weather-condition {
+    font-size: 1.5rem;
+    font-weight: 500;
+    margin-bottom: 0.75rem;
+  }
+
+  .weather-details {
+    display: flex;
+    gap: 1.5rem;
+  }
+
+  .detail-item {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 0.95rem;
-    opacity: 0.8;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.7);
   }
 
-  /* Right Section */
-  .right-section {
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(20px);
-    border-radius: 30px;
-    padding: 25px 20px;
-    animation: fadeInUp 1s ease-out 0.4s both;
-    height: 420px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+  /* Air Quality */
+  .air-quality-section {
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
   }
 
-  .weekly-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-    height: 35px;
-    flex-shrink: 0;
-  }
-
-  .weekly-header h3 {
-    font-size: 0.85rem;
+  .section-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
     letter-spacing: 0.1em;
-    margin: 0;
-    opacity: 0.9;
+    color: rgba(255, 255, 255, 0.5);
+    margin: 0 0 1rem 0;
   }
 
-  .current-date {
-    font-size: 0.8rem;
-    opacity: 0.7;
-  }
-
-  .header-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    height: 100%;
-  }
-
-  .header-content.selected {
-    justify-content: flex-start;
-    gap: 15px;
-  }
-
-  .back-btn {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 10px;
-    width: 35px;
-    height: 35px;
+  .air-quality-card {
     display: flex;
     align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    color: white;
+    gap: 2rem;
   }
 
-  .back-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: translateX(-2px);
+  .air-status {
+    font-size: 1.25rem;
+    font-weight: 600;
   }
 
-  .back-btn:active {
-    transform: scale(0.95) translateX(-2px);
+  .air-values {
+    display: flex;
+    gap: 1.5rem;
   }
 
-  .selected-date {
-    font-size: 0.8rem;
-    opacity: 0.7;
-    margin-left: auto;
-  }
-
-  .weekly-content {
-    flex: 1;
+  .air-item {
     display: flex;
     flex-direction: column;
-    position: relative;
-    overflow: hidden;
+    gap: 0.25rem;
   }
 
-  .weekly-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    flex: 1;
-    overflow-y: auto;
+  .air-label {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
   }
 
-  .day-card {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 15px;
-    padding: 15px 18px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+  .air-value {
+    font-size: 1.125rem;
+    font-weight: 600;
+  }
+
+  /* Today's Hourly */
+  .today-hourly {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 1.5rem;
+    padding: 1.5rem;
+  }
+
+  .hourly-preview-detailed {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 1rem;
+  }
+
+  .hour-detail-card-overview {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    padding: 1.25rem;
+    transition: all 0.2s ease;
+  }
+
+  .hour-detail-card-overview:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-2px);
+  }
+
+  /* Week Preview */
+  .week-preview {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 1.5rem;
+    padding: 1.5rem;
+  }
+
+  .days-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem;
+  }
+
+  .day-preview-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    padding: 1.25rem;
+    text-align: center;
     cursor: pointer;
-    transition: all 0.3s ease;
-    color: white;
+    transition: all 0.2s ease;
+    color: #ffffff;
   }
 
-  .day-card:hover {
-    background: rgba(255, 255, 255, 0.15);
-    transform: translateX(-5px);
+  .day-preview-card.today {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
   }
 
-  .day-card.active {
-    background: rgba(255, 255, 255, 0.25);
-    border-color: rgba(255, 255, 255, 0.4);
-  }
-
-  .day-left {
-    display: flex;
-    align-items: center;
-    gap: 15px;
+  .day-preview-card:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-2px);
   }
 
   .day-name {
-    font-size: 0.95rem;
-    font-weight: 500;
-    min-width: 50px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
   }
 
   .day-icon {
-    font-size: 1.5rem;
+    font-size: 2rem;
+    margin-bottom: 0.75rem;
   }
 
-  .day-right {
+  .day-temps {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
   }
 
-  .day-temp {
-    font-size: 1.1rem;
+  .temp-high {
     font-weight: 600;
   }
 
-  .day-temp-low {
-    font-size: 0.9rem;
-    opacity: 0.6;
+  .temp-low {
+    color: rgba(255, 255, 255, 0.5);
   }
 
-  .rain-badge {
+  .day-rain {
     font-size: 0.75rem;
-    background: rgba(66, 165, 245, 0.3);
-    padding: 2px 6px;
-    border-radius: 10px;
+    color: #60a5fa;
   }
 
-  /* Weekly Hourly Detail Section */
-  .weekly-hourly-detail {
+  /* Hourly View */
+  .hourly-view {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .day-selector {
     display: flex;
-    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 1rem;
+  }
+
+  .day-tab {
     flex: 1;
-    position: relative;
-    overflow: hidden;
-    height: 100%;
-    -webkit-mask-image: linear-gradient(
-      to bottom,
-      transparent 0%,
-      black 8%,
-      black 92%,
-      transparent 100%
-    );
-    mask-image: linear-gradient(
-      to bottom,
-      transparent 0%,
-      black 8%,
-      black 92%,
-      transparent 100%
-    );
-  }
-
-  @keyframes slideIn {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .weekly-hourly-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
-  }
-
-  .weekly-hourly-header h4 {
-    margin: 0;
-    font-size: 0.9rem;
-    color: white;
-    opacity: 0.9;
-  }
-
-  .close-btn {
-    background: none;
-    border: none;
-    color: white;
-    font-size: 1.2rem;
-    cursor: pointer;
-    opacity: 0.7;
-    transition: opacity 0.3s ease;
-  }
-
-  .close-btn:hover {
-    opacity: 1;
-  }
-
-  .weekly-hourly-scroll {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 0 5px 80px 5px;
-    height: calc(100% - 10px);
-    /* 스크롤바 완전 숨김 */
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE 10+ */
-  }
-
-  /* Webkit 브라우저 스크롤바 완전 숨김 */
-  .weekly-hourly-scroll::-webkit-scrollbar {
-    width: 0;
-    height: 0;
-    display: none;
-  }
-
-  .weekly-hour-item {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    padding: 20px 20px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    transition: all 0.3s ease;
-    min-height: 120px;
-  }
-
-  .weekly-hour-item:hover {
-    background: rgba(255, 255, 255, 0.15);
-    transform: translateX(3px);
-  }
-
-  .weekly-hour-time {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-    min-width: 60px;
-  }
-
-  .weekly-hour-data {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex: 1;
-  }
-
-  .data-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.9rem;
-    line-height: 1.5;
-  }
-
-  .data-label {
-    color: rgba(255, 255, 255, 0.7);
+    padding: 0.75rem;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 0.75rem;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.875rem;
     font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
   }
 
-  .data-value {
-    color: rgba(255, 255, 255, 0.95);
-    font-weight: 600;
+  .day-tab:hover {
     background: rgba(255, 255, 255, 0.05);
-    border-radius: 10px;
-    gap: 5px;
-    color: white;
-    animation: fadeInUp 0.4s ease forwards;
   }
 
-  .weekly-hour-time {
-    font-size: 0.8rem;
+  .day-tab.active {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+  }
+
+  .day-date {
+    font-size: 0.75rem;
     opacity: 0.7;
   }
 
-  .weekly-hour-icon {
-    font-size: 1.4rem;
-  }
-
-  .weekly-hour-temp {
-    font-size: 0.9rem;
-    font-weight: 500;
-  }
-
-  /* Bottom Section */
-  .bottom-section {
-    background: rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(10px);
-    padding: 25px 60px;
-    animation: fadeInUp 1.2s ease-out 0.6s both;
-  }
-
-  .hourly-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-  }
-
-  .hourly-header h3 {
-    font-size: 0.85rem;
-    letter-spacing: 0.1em;
-    margin: 0;
-    opacity: 0.9;
-  }
-
-  .back-btn {
-    background: rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 20px;
-    color: white;
-    padding: 8px 16px;
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-  }
-
-  .back-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
-  }
-
-  .hourly-scroll {
-    display: flex;
-    gap: 15px;
-    overflow-x: auto;
-    padding-bottom: 15px;
-  }
-
-  .hourly-scroll::-webkit-scrollbar {
-    height: 6px;
-  }
-
-  .hourly-scroll::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-  }
-
-  .hourly-scroll::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 10px;
-  }
-
-  .hour-card {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 20px;
-    padding: 20px 25px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
-    min-width: 80px;
-    transition: all 0.3s ease;
-  }
-
-  .hour-card:hover {
-    background: rgba(255, 255, 255, 0.15);
-    transform: translateY(-5px);
-  }
-
-  .hour-time {
-    font-size: 0.85rem;
-    opacity: 0.8;
-  }
-
-  .hour-icon {
-    font-size: 1.8rem;
-  }
-
-  .hour-temp {
-    font-size: 1.1rem;
-    font-weight: 600;
-  }
-
-  .hour-rain {
-    font-size: 0.75rem;
-    opacity: 0.8;
+  .hourly-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 1rem;
   }
 
   .hour-detail-card {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 20px;
-    padding: 20px;
-    min-width: 140px;
-    transition: all 0.3s ease;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    padding: 1.25rem;
+    transition: all 0.2s ease;
   }
 
   .hour-detail-card:hover {
-    background: rgba(255, 255, 255, 0.15);
-    transform: translateY(-5px);
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-2px);
   }
 
-  .hour-detail-time {
-    font-size: 0.9rem;
-    font-weight: 600;
-    margin-bottom: 10px;
-    text-align: center;
-  }
-
-  .hour-detail-icon {
-    font-size: 2rem;
-    text-align: center;
-    margin-bottom: 15px;
-  }
-
-  .hour-detail-info {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .info-row {
+  .hour-header {
     display: flex;
     justify-content: space-between;
-    font-size: 0.85rem;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
 
-  .info-label {
-    opacity: 0.7;
+  .hour-time-label {
+    font-size: 0.875rem;
+    font-weight: 600;
   }
 
-  .info-value {
+  .hour-weather-icon {
+    font-size: 1.25rem;
+  }
+
+  .hour-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .temp-info {
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .actual-temp, .feels-temp {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .temp-label {
+    font-size: 0.625rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .temp-val {
+    font-size: 1.125rem;
+    font-weight: 600;
+  }
+
+  .precipitation-info {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem;
+    background: rgba(96, 165, 250, 0.1);
+    border-radius: 0.5rem;
+  }
+
+  .precip-label {
+    font-size: 0.75rem;
+    color: #60a5fa;
+  }
+
+  .precip-value {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #60a5fa;
+  }
+
+  .air-info {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 0.5rem;
+  }
+
+  .air-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .metric-label {
+    font-size: 0.625rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+  }
+
+  .metric-value {
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  /* Weekly View */
+  .weekly-view {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .week-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .week-day-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1.5rem;
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+  }
+
+  .week-day-card:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-4px);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  }
+
+  .week-day-header {
+    margin-bottom: 1.5rem;
+  }
+
+  .week-day-name {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0 0 0.25rem 0;
+  }
+
+  .week-day-date {
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .week-day-weather {
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .week-weather-icon {
+    font-size: 3rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .week-weather-text {
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .week-day-temps {
+    margin-bottom: 1.5rem;
+  }
+
+  .temp-range {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 0.75rem;
+  }
+
+  .temp-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .temp-type {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .temp-number {
+    font-size: 1.5rem;
+    font-weight: 600;
+  }
+
+  .temp-divider {
+    width: 1px;
+    height: 2rem;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .week-day-rain {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: rgba(96, 165, 250, 0.1);
+    border-radius: 0.75rem;
+    color: #60a5fa;
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+  }
+
+  .view-hourly-btn {
+    width: 100%;
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.75rem;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.875rem;
     font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
   }
 
-  .info-value.good {
-    color: #4CAF50;
-  }
-
-  .info-value.bad {
-    color: #FF5252;
+  .view-hourly-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
   }
 
   /* Modal */
@@ -1325,131 +1235,144 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(10px);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
-    animation: fadeIn 0.3s ease;
+    animation: fadeIn 0.2s ease;
   }
 
   .modal {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 30px;
-    padding: 30px;
+    background: #1a1a1a;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1.5rem;
     width: 90%;
     max-width: 500px;
     max-height: 70vh;
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    animation: slideUp 0.4s ease;
+    animation: slideUp 0.3s ease;
   }
 
   .modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 25px;
+    padding: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
 
   .modal-header h3 {
     margin: 0;
-    font-size: 1.3rem;
+    font-size: 1.25rem;
+    font-weight: 600;
   }
 
-  .close-btn {
-    background: rgba(255, 255, 255, 0.2);
+  .modal-close {
+    background: transparent;
     border: none;
-    color: white;
-    font-size: 1.5rem;
-    width: 35px;
-    height: 35px;
-    border-radius: 50%;
+    color: rgba(255, 255, 255, 0.5);
     cursor: pointer;
-    transition: all 0.3s ease;
-  }
-
-  .close-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
-    transform: rotate(90deg);
-  }
-
-  .search-container {
+    padding: 0.5rem;
     display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+  }
+
+  .modal-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+  }
+
+  .search-box {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1.5rem;
   }
 
   .search-input {
     flex: 1;
-    background: rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 15px;
-    color: white;
-    padding: 12px 20px;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.75rem;
+    color: #ffffff;
     font-size: 1rem;
   }
 
   .search-input::placeholder {
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(255, 255, 255, 0.4);
   }
 
-  .search-btn {
-    background: rgba(255, 255, 255, 0.3);
-    border: none;
-    border-radius: 15px;
-    color: white;
-    padding: 0 20px;
+  .search-input:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .search-button {
+    padding: 0.75rem 1.25rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.75rem;
+    color: #ffffff;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
-  .search-btn:hover {
-    background: rgba(255, 255, 255, 0.4);
+  .search-button:hover {
+    background: rgba(255, 255, 255, 0.15);
   }
 
   .search-results {
     flex: 1;
     overflow-y: auto;
+    padding: 0 1.5rem 1.5rem;
   }
 
-  .result-item {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 15px;
-    padding: 15px 20px;
-    margin-bottom: 10px;
-    cursor: pointer;
-    transition: all 0.3s ease;
+  .location-result {
     width: 100%;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.75rem;
+    margin-bottom: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
     text-align: left;
-    color: white;
+    color: #ffffff;
   }
 
-  .result-item:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: translateX(5px);
+  .location-result:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateX(4px);
   }
 
-  .result-name {
+  .location-name {
     display: block;
     font-size: 1rem;
     font-weight: 500;
-    margin-bottom: 5px;
+    margin-bottom: 0.25rem;
   }
 
-  .result-full {
+  .location-full {
     display: block;
-    font-size: 0.85rem;
-    opacity: 0.7;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
   }
 
-  .searching, .no-results {
+  .search-loading, .no-results {
     text-align: center;
-    padding: 30px;
-    opacity: 0.7;
+    padding: 2rem;
+    color: rgba(255, 255, 255, 0.5);
   }
 
   /* Animations */
@@ -1458,7 +1381,7 @@
     to { opacity: 1; }
   }
 
-  @keyframes fadeInUp {
+  @keyframes slideUp {
     from {
       opacity: 0;
       transform: translateY(20px);
@@ -1469,179 +1392,62 @@
     }
   }
 
-  @keyframes slideUp {
-    from {
-      opacity: 0;
-      transform: translateY(50px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .main-content {
-    flex: 1;
-    display: grid;
-    grid-template-columns: 1fr auto 300px;
-    gap: 60px;
-    padding: 40px 60px;
-    align-items: center;
-  }
-
-  /* 모바일 레이아웃 (768px 이하) */
+  /* Responsive */
   @media (max-width: 768px) {
-    .main-content {
-      display: flex;
+    .app-header {
       flex-direction: column;
-      padding: 20px;
-      gap: 30px;
+      gap: 1rem;
+      padding: 1rem;
     }
 
-    /* 1. Good afternoon 같은 멘트와 Get ready 멘트 */
-    .left-section {
-      order: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
+    .header-left, .header-center, .header-right {
+      width: 100%;
     }
 
-    .greeting-container {
-      order: 1;
-      text-align: center;
-    }
-
-    .greeting {
-      font-size: 2rem;
-      margin-bottom: 10px;
-    }
-
-    .subtitle {
-      font-size: 1rem;
-      opacity: 0.9;
-    }
-
-    /* 2. 지역 버튼 */
-    .location-btn {
-      order: 2;
-      align-self: center;
-      margin: 0;
-    }
-
-    /* 3. 날씨 애니메이션 */
-    .weather-visual {
-      order: 3;
-      margin: 20px auto;
-    }
-
-    /* 4. 온도와 날씨 상태 */
-    .center-section {
-      order: 2;
-      text-align: center;
-    }
-
-    .temperature-container {
+    .view-tabs {
       justify-content: center;
-      margin-bottom: 10px;
+    }
+
+    .main-content {
+      padding: 1rem;
+    }
+
+    .weather-main {
+      flex-direction: column;
+      text-align: center;
+      gap: 1.5rem;
+    }
+
+    .weather-details {
+      justify-content: center;
+    }
+
+    .hourly-preview-detailed {
+      grid-template-columns: 1fr;
+    }
+
+    .days-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .week-cards {
+      grid-template-columns: 1fr;
+    }
+
+    .hourly-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .day-selector {
+      flex-direction: column;
     }
 
     .temp-value {
-      font-size: 5rem;
+      font-size: 4rem;
     }
 
     .temp-unit {
       font-size: 2rem;
-    }
-
-    /* 5. 날씨 상태 (대체로 맑음 같은) */
-    .weather-status {
-      font-size: 1.2rem;
-      margin-bottom: 15px;
-    }
-
-    /* 6. 풍향 정보 */
-    .wind-info {
-      justify-content: center;
-      font-size: 1rem;
-      margin-bottom: 20px;
-    }
-
-    /* 7. Today's Hourly (This Week보다 위에 표시) */
-    .bottom-section {
-      order: 2;
-      padding: 20px;
-      margin: 0 -20px;
-      display: block;
-    }
-
-    /* 모바일에서 시간별 예보를 세로 리스트로 변경 */
-    .hourly-scroll {
-      display: flex;
-      flex-direction: column;
-      overflow-y: auto;
-      overflow-x: hidden;
-      gap: 10px;
-      max-height: 450px;
-      padding-right: 5px;
-      /* 스크롤바 숨김 */
-      scrollbar-width: none;
-      -ms-overflow-style: none;
-    }
-
-    .hourly-scroll::-webkit-scrollbar {
-      display: none;
-    }
-
-    /* 각 시간 카드를 가로로 펼쳐서 표시 */
-    .hour-card {
-      display: flex;
-      flex-direction: row;
-      align-items: center;
-      justify-content: space-between;
-      width: 100%;
-      padding: 12px 15px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 12px;
-      margin-bottom: 8px;
-    }
-
-    .hour-card:hover {
-      background: rgba(255, 255, 255, 0.1);
-    }
-
-    .hour-time {
-      font-size: 0.95rem;
-      min-width: 50px;
-      font-weight: 500;
-    }
-
-    .hour-icon {
-      font-size: 1.4rem;
-      min-width: 35px;
-      text-align: center;
-    }
-
-    .hour-temp {
-      font-size: 1rem;
-      font-weight: 600;
-      min-width: 45px;
-    }
-
-    .hour-rain {
-      font-size: 0.85rem;
-      min-width: 50px;
-      text-align: right;
-    }
-
-    /* 8. This Week (Today's Hourly 아래에 표시) */
-    .right-section {
-      order: 3;
-      width: 100%;
-      max-width: 100%;
-      margin: 0;
-      height: auto;
-      min-height: 400px;
-      display: block;
     }
   }
 </style>
