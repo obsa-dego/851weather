@@ -44,7 +44,12 @@
     updateDateTime();
     const interval = setInterval(updateDateTime, 1000);
     loadWeatherData();
-    return () => clearInterval(interval);
+
+    // CSS flexbox order로 순서 제어 - DOM 조작 제거
+
+    return () => {
+      clearInterval(interval);
+    };
   });
 
   function updateDateTime() {
@@ -439,6 +444,61 @@
       </div>
     </div>
 
+    <!-- Bottom Section - Hourly Forecast (DOM 순서: 모바일에서 위에 오도록) -->
+    <div class="bottom-section">
+      <div class="hourly-header">
+        <h3>TODAY'S HOURLY</h3>
+        {#if showHourlyDetail && selectedDayIndex !== null}
+          <button class="back-btn" on:click={() => {showHourlyDetail = false; selectedDayIndex = null;}}>
+            Back to Today
+          </button>
+        {/if}
+      </div>
+
+      {#if !showHourlyDetail}
+        <!-- Today Hourly -->
+        <div class="hourly-scroll">
+          {#each hourlyForecast.slice(0, 24) as hour, i}
+            <div class="hour-card" in:fly={{x: -20, delay: Math.min(i * 50, 400), duration: 300, easing: cubicInOut}}>
+              <div class="hour-time">{hour.time}</div>
+              <div class="hour-temp">{hour.temp}°</div>
+              <div class="hour-icon">{hour.icon}</div>
+              {#if hour.precipitation > 0}
+                <div class="hour-rain">💧{hour.precipitation}%</div>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <!-- Hourly Detail -->
+        <div class="hourly-detail-container">
+          {#each selectedDayHourlyData as hour, i}
+            <div class="hour-detail-card" in:fly={{y: 20, delay: Math.min(i * 30, 300), duration: 300, easing: cubicInOut}}>
+              <div class="detail-time">{hour.hour || hour.time?.split(":")[0] + 'h' || '0h'}</div>
+              <div class="detail-info">
+                <div class="info-row">
+                  <span>기온:</span>
+                  <span>{hour.temp || hour.temperature || 0}°C</span>
+                </div>
+                <div class="info-row">
+                  <span>체감:</span>
+                  <span>{hour.feelsLike || 0}°C</span>
+                </div>
+                <div class="info-row">
+                  <span>강수:</span>
+                  <span>{hour.precipitation || 0}mm</span>
+                </div>
+                <div class="info-row">
+                  <span>PM10:</span>
+                  <span>{hour.pm10 || 0}µg/m³</span>
+                </div>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
     <!-- Right Section - Weekly Forecast -->
     <div class="right-section">
       <!-- Dynamic Header -->
@@ -529,67 +589,6 @@
     </div>
   </div>
 
-  <!-- Bottom Section - Hourly Forecast -->
-  <div class="bottom-section">
-    <div class="hourly-header">
-      <h3>TODAY'S HOURLY</h3>
-      {#if showHourlyDetail && selectedDayIndex !== null}
-        <button class="back-btn" on:click={() => {showHourlyDetail = false; selectedDayIndex = null;}}>
-          Back to Today
-        </button>
-      {/if}
-    </div>
-
-    <div class="hourly-scroll">
-      {#if !showHourlyDetail}
-        <!-- Today's hourly forecast -->
-        {#each hourlyForecast.slice(0, 24) as hour}
-          <div class="hour-card">
-            <span class="hour-time">{hour.time}</span>
-            <span class="hour-icon">{hour.icon}</span>
-            <span class="hour-temp">{hour.temp}°</span>
-            {#if hour.precipitation > 0}
-              <span class="hour-rain">💧{hour.precipitation}%</span>
-            {/if}
-          </div>
-        {/each}
-      {:else}
-        <!-- Selected day's detailed hourly forecast -->
-        {#each selectedDayHourlyData as hour}
-          <div class="hour-detail-card">
-            <div class="hour-detail-time">{hour.hour}</div>
-            <div class="hour-detail-icon">{hour.icon}</div>
-            <div class="hour-detail-info">
-              <div class="info-row">
-                <span class="info-label">기온</span>
-                <span class="info-value">{hour.temp}°</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">체감</span>
-                <span class="info-value">{hour.feelsLike}°</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">강수</span>
-                <span class="info-value">{hour.precipitation}%</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">PM10</span>
-                <span class="info-value" class:good={hour.pm10 < 30} class:bad={hour.pm10 >= 80}>
-                  {hour.pm10}
-                </span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">PM2.5</span>
-                <span class="info-value" class:good={hour.pm25 < 15} class:bad={hour.pm25 >= 35}>
-                  {hour.pm25}
-                </span>
-              </div>
-            </div>
-          </div>
-        {/each}
-      {/if}
-    </div>
-  </div>
 
   <!-- Location Search Modal -->
   {#if showLocationSearch}
@@ -651,14 +650,24 @@
     overflow: hidden;
   }
 
+  /* PC 기본 레이아웃 */
   .main-content {
     flex: 1;
     display: grid;
     grid-template-columns: 1fr auto 300px;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "left center right"
+      "bottom bottom bottom";
     gap: 60px;
     padding: 40px 60px;
-    align-items: center;
+    align-items: start;
   }
+
+  .left-section { grid-area: left; }
+  .center-section { grid-area: center; }
+  .right-section { grid-area: right; }
+  .bottom-section { grid-area: bottom; }
 
   /* Left Section */
   .left-section {
@@ -1471,54 +1480,17 @@
     }
   }
 
-  /* Responsive */
-  @media (max-width: 1200px) {
-    .main-content {
-      grid-template-columns: 1fr;
-      gap: 40px;
-      padding: 30px;
-    }
-
-    .center-section {
-      order: -1;
-    }
-
-    .right-section {
-      width: 100%;
-      max-width: 500px;
-      margin: 0 auto;
-    }
-
-    .greeting {
-      font-size: 2.5rem;
-    }
-
-    .temp-value {
-      font-size: 6rem;
-    }
-
-    .weather-visual {
-      width: 200px;
-      height: 150px;
-    }
-
-    .sun {
-      width: 80px;
-      height: 80px;
-    }
-
-    .cloud {
-      width: 120px;
-      height: 45px;
-    }
+  .main-content {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr auto 300px;
+    gap: 60px;
+    padding: 40px 60px;
+    align-items: center;
   }
 
+  /* 모바일 레이아웃 (768px 이하) */
   @media (max-width: 768px) {
-    .weather-app {
-      display: flex;
-      flex-direction: column;
-    }
-
     .main-content {
       display: flex;
       flex-direction: column;
@@ -1596,18 +1568,18 @@
 
     /* 7. Today's Hourly (This Week보다 위에 표시) */
     .bottom-section {
-      order: 3 !important;
+      order: 2;
       padding: 20px;
       margin: 0 -20px;
-      display: block !important;
+      display: block;
     }
 
     /* 모바일에서 시간별 예보를 세로 리스트로 변경 */
     .hourly-scroll {
-      display: flex !important;
-      flex-direction: column !important;
-      overflow-y: auto !important;
-      overflow-x: hidden !important;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      overflow-x: hidden;
       gap: 10px;
       max-height: 450px;
       padding-right: 5px;
@@ -1622,8 +1594,8 @@
 
     /* 각 시간 카드를 가로로 펼쳐서 표시 */
     .hour-card {
-      display: flex !important;
-      flex-direction: row !important;
+      display: flex;
+      flex-direction: row;
       align-items: center;
       justify-content: space-between;
       width: 100%;
@@ -1663,13 +1635,13 @@
 
     /* 8. This Week (Today's Hourly 아래에 표시) */
     .right-section {
-      order: 4 !important;
+      order: 3;
       width: 100%;
       max-width: 100%;
       margin: 0;
       height: auto;
       min-height: 400px;
-      display: block !important;
+      display: block;
     }
   }
 </style>
