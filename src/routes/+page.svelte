@@ -1,5 +1,7 @@
 <script>
   import { onMount } from 'svelte';
+  import { fade, fly, scale } from 'svelte/transition';
+  import { cubicInOut } from 'svelte/easing';
 
   // State variables
   let currentTime = '';
@@ -231,41 +233,26 @@
 
   // 날짜 선택 핸들러
   function selectDay(index) {
-    // selectedDayIndex = index; // 하단 섹션 변경하지 않도록 주석 처리
-    // updateSelectedDayHourlyForecast(index);
-    // showHourlyDetail = true;
-    // 주간 예보 섹션만 변경하는 로직
-    console.log("Day clicked:", index, "Current page:", currentPage);
+    console.log("Day clicked:", index);
+
     if (selectedDay === index) {
       // 같은 날짜 클릭 시 토글
-      transitioning = true;
-      setTimeout(() => {
-        selectedDay = null;
-        selectedDayHourlyData = null;
-        currentPage = 0;
-        transitioning = false;
-      }, 300);
+      selectedDay = null;
+      selectedDayHourlyData = null;
+      selectedDayIndex = null;
     } else {
-      transitioning = true;
       // 선택된 날짜의 시간별 데이터 설정
       if (allHourlyData && allHourlyData.length > 0) {
         const startIndex = index * 24;
         selectedDayHourlyData = allHourlyData.slice(startIndex, startIndex + 24);
-        console.log("Selected day hourly data sample:", selectedDayHourlyData.slice(0, 3)); // 디버깅용
+        console.log("Selected day hourly data sample:", selectedDayHourlyData.slice(0, 3));
       } else {
-        // 데이터가 없을 때 빈 배열 사용
         selectedDayHourlyData = [];
         console.log("No hourly data available");
       }
-      setTimeout(() => {
-        selectedDay = index;
-        currentPage = 1;
-        transitioning = false;
-      }, 300);
+      selectedDay = index;
+      selectedDayIndex = index;
     }
-    console.log("After click - Selected day:", selectedDay, "Page:", currentPage);
-    // This Week 섹션의 시각적 활성화를 위해 selectedDayIndex 설정
-    selectedDayIndex = selectedDay;
   }
 
   // 선택된 날짜의 시간별 예보 업데이트
@@ -454,74 +441,91 @@
 
     <!-- Right Section - Weekly Forecast -->
     <div class="right-section">
+      <!-- Dynamic Header -->
       <div class="weekly-header">
-        <h3>THIS WEEK</h3>
-        <span class="current-date">{currentDate}</span>
-      </div>
-
-      <div class="weekly-list" style="display: {selectedDay === null ? 'flex' : 'none'}">
-        {#each fiveDayForecast as day, index}
-          <button
-            class="day-card"
-            class:active={index === selectedDayIndex}
-            on:click={() => selectDay(index)}
-          >
-            <div class="day-left">
-              <span class="day-name">{index === 0 ? 'Today' : day.day}</span>
-              <span class="day-icon">{day.icon}</span>
-            </div>
-            <div class="day-right">
-              <span class="day-temp">{day.high}°</span>
-              <span class="day-temp-low">{day.low}°</span>
-              {#if day.precipitation > 30}
-                <span class="rain-badge">💧 {day.precipitation}%</span>
-              {/if}
-            </div>
-          </button>
-        {/each}
-      </div>
-
-      <!-- Weekly Hourly Detail Section -->
-
-      {#if selectedDay !== null && selectedDayHourlyData}
-        <div class="weekly-hourly-detail" class:visible={currentPage === 1}>
-          <div class="weekly-hourly-header">
-            <h4>시간별 예보</h4>
-            <button class="close-btn" on:click={() => {selectedDay = null; selectedDayIndex = null; currentPage = 0;}}>
-              ←
-            </button>
+        {#if selectedDay === null}
+          <div class="header-content" in:fade={{duration: 300, easing: cubicInOut}}>
+            <h3>THIS WEEK</h3>
+            <span class="current-date">{currentDate}</span>
           </div>
-          <div class="weekly-hourly-scroll">
-            {#each selectedDayHourlyData.slice(0, 8) as hour}
-              <div class="weekly-hour-item">
-                <div class="weekly-hour-time">{hour.hour || hour.time?.split(":")[0] + 'h' || '0h'}</div>
-                <div class="weekly-hour-data">
-                  <div class="data-row">
-                    <span class="data-label">기온:</span>
-                    <span class="data-value">{hour.temp || hour.temperature || 0}°C</span>
-                  </div>
-                  <div class="data-row">
-                    <span class="data-label">체감:</span>
-                    <span class="data-value">{hour.feelsLike || 0}°C</span>
-                  </div>
-                  <div class="data-row">
-                    <span class="data-label">강수:</span>
-                    <span class="data-value">{hour.precipitation || 0}mm</span>
-                  </div>
-                  <div class="data-row">
-                    <span class="data-label">PM10:</span>
-                    <span class="data-value">{hour.pm10 || 0}µg/m³</span>
-                  </div>
-                  <div class="data-row">
-                    <span class="data-label">PM2.5:</span>
-                    <span class="data-value">{hour.pm25 || 0}µg/m³</span>
-                  </div>
+        {:else}
+          <div class="header-content selected" in:fade={{duration: 300, easing: cubicInOut}}>
+            <button class="back-btn" on:click={() => {selectedDay = null; selectedDayIndex = null;}}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M19 12H5M5 12L12 19M5 12L12 5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <h3>{fiveDayForecast[selectedDay]?.day === '토' || fiveDayForecast[selectedDay]?.day === '일' ? fiveDayForecast[selectedDay]?.day + '요일' : selectedDay === 0 ? '오늘' : fiveDayForecast[selectedDay]?.day + '요일'}</h3>
+            <span class="selected-date">{fiveDayForecast[selectedDay]?.date}일</span>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Content Area with Transitions -->
+      <div class="weekly-content">
+        {#if selectedDay === null}
+          <!-- Weekly List -->
+          <div class="weekly-list"
+               in:fly={{y: 20, duration: 400, easing: cubicInOut}}
+               out:fly={{y: -20, duration: 300, easing: cubicInOut}}>
+            {#each fiveDayForecast as day, index}
+              <button
+                class="day-card"
+                class:active={index === selectedDayIndex}
+                on:click={() => selectDay(index)}
+              >
+                <div class="day-left">
+                  <span class="day-name">{index === 0 ? 'Today' : day.day}</span>
+                  <span class="day-icon">{day.icon}</span>
                 </div>
-              </div>
+                <div class="day-right">
+                  <span class="day-temp">{day.high}°</span>
+                  <span class="day-temp-low">{day.low}°</span>
+                  {#if day.precipitation > 30}
+                    <span class="rain-badge">💧 {day.precipitation}%</span>
+                  {/if}
+                </div>
+              </button>
             {/each}
           </div>
-        </div>
-      {/if}
+        {:else if selectedDayHourlyData}
+          <!-- Hourly Detail -->
+          <div class="weekly-hourly-detail"
+               in:fly={{y: 20, duration: 400, easing: cubicInOut}}
+               out:fly={{y: -20, duration: 300, easing: cubicInOut}}>
+            <div class="weekly-hourly-scroll">
+              {#each selectedDayHourlyData as hour, i}
+                <div class="weekly-hour-item"
+                     in:fly={{y: 10, delay: Math.min(i * 30, 300), duration: 300, easing: cubicInOut}}>
+                  <div class="weekly-hour-time">{hour.hour || hour.time?.split(":")[0] + 'h' || '0h'}</div>
+                  <div class="weekly-hour-data">
+                    <div class="data-row">
+                      <span class="data-label">기온:</span>
+                      <span class="data-value">{hour.temp || hour.temperature || 0}°C</span>
+                    </div>
+                    <div class="data-row">
+                      <span class="data-label">체감:</span>
+                      <span class="data-value">{hour.feelsLike || 0}°C</span>
+                    </div>
+                    <div class="data-row">
+                      <span class="data-label">강수:</span>
+                      <span class="data-value">{hour.precipitation || 0}mm</span>
+                    </div>
+                    <div class="data-row">
+                      <span class="data-label">PM10:</span>
+                      <span class="data-value">{hour.pm10 || 0}µg/m³</span>
+                    </div>
+                    <div class="data-row">
+                      <span class="data-label">PM2.5:</span>
+                      <span class="data-value">{hour.pm25 || 0}µg/m³</span>
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
 
@@ -855,21 +859,23 @@
     background: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(20px);
     border-radius: 30px;
-    padding: 30px 25px;
+    padding: 25px 20px;
     animation: fadeInUp 1s ease-out 0.4s both;
-    min-height: 450px;
-    height: 450px;
+    height: 420px;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
   }
 
   .weekly-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 25px;
-    padding-bottom: 15px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    height: 35px;
+    flex-shrink: 0;
   }
 
   .weekly-header h3 {
@@ -882,6 +888,55 @@
   .current-date {
     font-size: 0.8rem;
     opacity: 0.7;
+  }
+
+  .header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 100%;
+  }
+
+  .header-content.selected {
+    justify-content: flex-start;
+    gap: 15px;
+  }
+
+  .back-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    width: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    color: white;
+  }
+
+  .back-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateX(-2px);
+  }
+
+  .back-btn:active {
+    transform: scale(0.95) translateX(-2px);
+  }
+
+  .selected-date {
+    font-size: 0.8rem;
+    opacity: 0.7;
+    margin-left: auto;
+  }
+
+  .weekly-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
   }
 
   .weekly-list {
@@ -956,14 +1011,26 @@
 
   /* Weekly Hourly Detail Section */
   .weekly-hourly-detail {
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 15px;
-    padding: 20px;
-    animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-    flex: 1;
     display: flex;
     flex-direction: column;
+    flex: 1;
+    position: relative;
     overflow: hidden;
+    height: 100%;
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 8%,
+      black 92%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 8%,
+      black 92%,
+      transparent 100%
+    );
   }
 
   @keyframes slideIn {
@@ -1008,21 +1075,32 @@
   .weekly-hourly-scroll {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     overflow-y: auto;
-    padding-right: 5px;
-    flex: 1;
-    max-height: 300px;
+    overflow-x: hidden;
+    padding: 0 5px 80px 5px;
+    height: calc(100% - 10px);
+    /* 스크롤바 완전 숨김 */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE 10+ */
+  }
+
+  /* Webkit 브라우저 스크롤바 완전 숨김 */
+  .weekly-hourly-scroll::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
   }
 
   .weekly-hour-item {
     display: flex;
     align-items: center;
-    gap: 15px;
-    padding: 12px 15px;
+    gap: 20px;
+    padding: 20px 20px;
     background: rgba(255, 255, 255, 0.1);
     border-radius: 12px;
     transition: all 0.3s ease;
+    min-height: 120px;
   }
 
   .weekly-hour-item:hover {
@@ -1031,16 +1109,16 @@
   }
 
   .weekly-hour-time {
-    font-size: 1rem;
+    font-size: 1.1rem;
     font-weight: 600;
     color: rgba(255, 255, 255, 0.9);
-    min-width: 50px;
+    min-width: 60px;
   }
 
   .weekly-hour-data {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
     flex: 1;
   }
 
@@ -1048,7 +1126,8 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
+    line-height: 1.5;
   }
 
   .data-label {
@@ -1435,20 +1514,162 @@
   }
 
   @media (max-width: 768px) {
+    .weather-app {
+      display: flex;
+      flex-direction: column;
+    }
+
     .main-content {
+      display: flex;
+      flex-direction: column;
       padding: 20px;
+      gap: 30px;
+    }
+
+    /* 1. Good afternoon 같은 멘트와 Get ready 멘트 */
+    .left-section {
+      order: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .greeting-container {
+      order: 1;
+      text-align: center;
     }
 
     .greeting {
       font-size: 2rem;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      font-size: 1rem;
+      opacity: 0.9;
+    }
+
+    /* 2. 지역 버튼 */
+    .location-btn {
+      order: 2;
+      align-self: center;
+      margin: 0;
+    }
+
+    /* 3. 날씨 애니메이션 */
+    .weather-visual {
+      order: 3;
+      margin: 20px auto;
+    }
+
+    /* 4. 온도와 날씨 상태 */
+    .center-section {
+      order: 2;
+      text-align: center;
+    }
+
+    .temperature-container {
+      justify-content: center;
+      margin-bottom: 10px;
     }
 
     .temp-value {
       font-size: 5rem;
     }
 
+    .temp-unit {
+      font-size: 2rem;
+    }
+
+    /* 5. 날씨 상태 (대체로 맑음 같은) */
+    .weather-status {
+      font-size: 1.2rem;
+      margin-bottom: 15px;
+    }
+
+    /* 6. 풍향 정보 */
+    .wind-info {
+      justify-content: center;
+      font-size: 1rem;
+      margin-bottom: 20px;
+    }
+
+    /* 7. Today's Hourly (This Week보다 위에 표시) */
     .bottom-section {
+      order: 3 !important;
       padding: 20px;
+      margin: 0 -20px;
+      display: block !important;
+    }
+
+    /* 모바일에서 시간별 예보를 세로 리스트로 변경 */
+    .hourly-scroll {
+      display: flex !important;
+      flex-direction: column !important;
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+      gap: 10px;
+      max-height: 450px;
+      padding-right: 5px;
+      /* 스크롤바 숨김 */
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .hourly-scroll::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* 각 시간 카드를 가로로 펼쳐서 표시 */
+    .hour-card {
+      display: flex !important;
+      flex-direction: row !important;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 12px 15px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      margin-bottom: 8px;
+    }
+
+    .hour-card:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .hour-time {
+      font-size: 0.95rem;
+      min-width: 50px;
+      font-weight: 500;
+    }
+
+    .hour-icon {
+      font-size: 1.4rem;
+      min-width: 35px;
+      text-align: center;
+    }
+
+    .hour-temp {
+      font-size: 1rem;
+      font-weight: 600;
+      min-width: 45px;
+    }
+
+    .hour-rain {
+      font-size: 0.85rem;
+      min-width: 50px;
+      text-align: right;
+    }
+
+    /* 8. This Week (Today's Hourly 아래에 표시) */
+    .right-section {
+      order: 4 !important;
+      width: 100%;
+      max-width: 100%;
+      margin: 0;
+      height: auto;
+      min-height: 400px;
+      display: block !important;
     }
   }
 </style>

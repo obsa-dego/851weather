@@ -145,6 +145,7 @@ declare module '$env/static/private' {
 	export const USERNAME: string;
 	export const USERPROFILE: string;
 	export const VBOX_HWVIRTEX_IGNORE_SVM_IN_USE: string;
+	export const VIPSHOME: string;
 	export const WINDIR: string;
 	export const WSLENV: string;
 	export const WT_PROFILE_ID: string;
@@ -298,6 +299,7 @@ declare module '$env/dynamic/private' {
 		USERNAME: string;
 		USERPROFILE: string;
 		VBOX_HWVIRTEX_IGNORE_SVM_IN_USE: string;
+		VIPSHOME: string;
 		WINDIR: string;
 		WSLENV: string;
 		WT_PROFILE_ID: string;
