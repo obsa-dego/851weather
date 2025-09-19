@@ -1165,85 +1165,148 @@
 <div class="weather-app">
   <!-- Header -->
   <header class="app-header">
-    <div class="header-center">
-      <!-- Language Dropdown -->
-      <div class="language-dropdown" class:open={showLanguageDropdown}>
-        <button class="language-button" on:click={toggleLanguageDropdown}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-          </svg>
-          <span>{selectedLanguage.name}</span>
-          <svg
-            class="dropdown-arrow"
-            class:rotated={showLanguageDropdown}
-            width="12" height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M6 9l6 6 6-6"/>
-          </svg>
-        </button>
+    <div class="header-container">
+      <!-- Left Section (Desktop only) -->
+      <div class="header-left">
+        <div class="brand-section">
+          <!-- Future: Logo or brand name can go here -->
+        </div>
+      </div>
 
-        {#if showLanguageDropdown}
-          <div class="language-menu" in:fly={{y: -10, duration: 200}} out:fly={{y: -10, duration: 150}}>
-            {#each supportedLanguages as language, i}
-              <button
-                class="language-option"
-                class:selected={selectedLanguage.code === language.code}
-                on:click={() => selectLanguage(language)}
-                in:fly={{y: -10, delay: i * 50, duration: 200}}
+      <!-- Center Section -->
+      <div class="header-center">
+        <!-- Mobile: Controls, Desktop: Navigation -->
+        <div class="header-controls mobile-only">
+          <!-- Language Dropdown -->
+          <div class="language-dropdown" class:open={showLanguageDropdown}>
+            <button class="language-button" on:click={toggleLanguageDropdown}>
+              <span class="lang-flag">{selectedLanguage.flag}</span>
+              <span class="lang-code">{selectedLanguage.code.toUpperCase()}</span>
+              <svg
+                class="dropdown-arrow"
+                class:rotated={showLanguageDropdown}
+                width="10" height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
               >
-                <span class="language-flag">{language.flag}</span>
-                <span class="language-name">{language.name}</span>
-                {#if selectedLanguage.code === language.code}
-                  <svg class="check-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M20 6L9 17l-5-5"/>
-                  </svg>
-                {/if}
-              </button>
-            {/each}
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+
+            {#if showLanguageDropdown}
+              <div class="language-menu" in:fly={{y: -10, duration: 200}} out:fly={{y: -10, duration: 150}}>
+                {#each supportedLanguages as language, i}
+                  <button
+                    class="language-option"
+                    class:selected={selectedLanguage.code === language.code}
+                    on:click={() => selectLanguage(language)}
+                    in:fly={{y: -10, delay: i * 50, duration: 200}}
+                  >
+                    <span class="language-flag">{language.flag}</span>
+                    <span class="language-name">{language.name}</span>
+                    {#if selectedLanguage.code === language.code}
+                      <svg class="check-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 6L9 17l-5-5"/>
+                      </svg>
+                    {/if}
+                  </button>
+                {/each}
+              </div>
+            {/if}
           </div>
-        {/if}
+
+          <!-- Location Button -->
+          <button class="location-button" on:click={openLocationSearch}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+              <circle cx="12" cy="9" r="2.5"/>
+            </svg>
+            <span class="location-text">{location.split(',')[0]}</span>
+          </button>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <nav class="view-tabs">
+          <button
+            class="tab-button"
+            class:active={activeView === 'overview'}
+            on:click={() => activeView = 'overview'}
+          >
+            {t('overview')}
+          </button>
+          <button
+            class="tab-button"
+            class:active={activeView === 'hourly'}
+            on:click={() => activeView = 'hourly'}
+          >
+            {t('hourly')}
+          </button>
+          <button
+            class="tab-button"
+            class:active={activeView === 'weekly'}
+            on:click={() => activeView = 'weekly'}
+          >
+            {t('weekly')}
+          </button>
+        </nav>
+      </div>
+
+      <!-- Right Section -->
+      <div class="header-right">
+        <div class="header-controls desktop-only">
+          <!-- Language Dropdown -->
+          <div class="language-dropdown" class:open={showLanguageDropdown}>
+            <button class="language-button" on:click={toggleLanguageDropdown}>
+              <span class="lang-flag">{selectedLanguage.flag}</span>
+              <span class="lang-code">{selectedLanguage.code.toUpperCase()}</span>
+              <svg
+                class="dropdown-arrow"
+                class:rotated={showLanguageDropdown}
+                width="10" height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+
+            {#if showLanguageDropdown}
+              <div class="language-menu" in:fly={{y: -10, duration: 200}} out:fly={{y: -10, duration: 150}}>
+                {#each supportedLanguages as language, i}
+                  <button
+                    class="language-option"
+                    class:selected={selectedLanguage.code === language.code}
+                    on:click={() => selectLanguage(language)}
+                    in:fly={{y: -10, delay: i * 50, duration: 200}}
+                  >
+                    <span class="language-flag">{language.flag}</span>
+                    <span class="language-name">{language.name}</span>
+                    {#if selectedLanguage.code === language.code}
+                      <svg class="check-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 6L9 17l-5-5"/>
+                      </svg>
+                    {/if}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+
+          <!-- Location Button -->
+          <button class="location-button" on:click={openLocationSearch}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+              <circle cx="12" cy="9" r="2.5"/>
+            </svg>
+            <span class="location-text">{location.split(',')[0]}</span>
+          </button>
+        </div>
       </div>
     </div>
-
-    <div class="header-right">
-      <button class="location-button" on:click={openLocationSearch}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-          <circle cx="12" cy="9" r="2.5"/>
-        </svg>
-        <span>{location}</span>
-      </button>
-    </div>
-
-    <!-- View Tabs -->
-    <nav class="view-tabs">
-      <button
-        class="tab-button"
-        class:active={activeView === 'overview'}
-        on:click={() => activeView = 'overview'}
-      >
-        {t('overview')}
-      </button>
-      <button
-        class="tab-button"
-        class:active={activeView === 'hourly'}
-        on:click={() => activeView = 'hourly'}
-      >
-        {t('hourly')}
-      </button>
-      <button
-        class="tab-button"
-        class:active={activeView === 'weekly'}
-        on:click={() => activeView = 'weekly'}
-      >
-        {t('weekly')}
-      </button>
-    </nav>
   </header>
 
   <!-- Main Content -->
@@ -1605,53 +1668,97 @@
 
   /* Header */
   .app-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem 2rem;
-    background: rgba(10, 10, 10, 0.95);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.5);
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     width: 100%;
     z-index: 10000;
+    background: rgba(10, 10, 10, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.5);
+  }
+
+  .header-container {
+    display: flex;
+    align-items: center;
+    padding: 1rem 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .header-left {
+    flex: 1;
+    display: flex;
+    justify-content: flex-start;
+  }
+
+  .header-center {
+    flex: 2;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    gap: 0.75rem;
   }
 
   .header-right {
     flex: 1;
     display: flex;
-    align-items: center;
-  }
-
-  .header-center {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .header-right {
     justify-content: flex-end;
-    gap: 1.5rem;
+  }
+
+  .header-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  /* Responsive Display Classes */
+  .mobile-only {
+    display: flex;
+  }
+
+  .desktop-only {
+    display: none;
+  }
+
+  .lang-flag {
+    font-size: 1.1rem;
+    line-height: 1;
+  }
+
+  .lang-code {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .location-text {
+    font-size: 0.875rem;
+    font-weight: 500;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .location-button {
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.625rem 1.25rem;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 2rem;
+    gap: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
     color: #ffffff;
     font-size: 0.875rem;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
+    min-height: 44px;
   }
 
   .location-button:hover {
@@ -1674,7 +1781,7 @@
   .view-tabs {
     display: flex;
     gap: 0.5rem;
-    justify-content: flex-end;
+    justify-content: center;
   }
 
   .tab-button {
@@ -1706,7 +1813,7 @@
     overflow-y: auto;
     overflow-x: hidden;
     padding: 2rem;
-    padding-top: 10rem;
+    padding-top: 7rem; /* Reduced for single-row header */
   }
 
   /* Scrollbar styling */
@@ -2414,17 +2521,18 @@
   .language-button {
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.625rem 1rem;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 0.75rem;
+    gap: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
     color: rgba(255, 255, 255, 0.9);
     font-size: 0.875rem;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
     backdrop-filter: blur(10px);
+    min-height: 44px;
   }
 
   .language-button:hover {
@@ -2541,31 +2649,131 @@
     color: rgba(255, 255, 255, 0.6);
   }
 
-  /* Responsive */
-  @media (max-width: 768px) {
-    .app-header {
-      flex-direction: row;
-      gap: 0.5rem;
-      padding: 1rem;
-      justify-content: space-between;
-    }
-
-    .header-center, .header-right {
-      flex: 1;
-      display: flex;
-      align-items: center;
-    }
-
+  /* Tablet Layout */
+  @media (min-width: 769px) and (max-width: 1024px) {
     .header-center {
-      justify-content: center;
+      flex-direction: row;
+      justify-content: space-between;
+      gap: 2rem;
     }
 
-    .header-right {
-      justify-content: flex-end;
+    .mobile-only {
+      display: none;
+    }
+
+    .desktop-only {
+      display: flex;
+    }
+
+    .header-left, .header-right {
+      flex: 0.5;
     }
 
     .view-tabs {
+      order: -1;
+    }
+
+    .language-button, .location-button {
+      padding: 0.625rem 1rem;
+      font-size: 0.875rem;
+    }
+
+    .main-content {
+      padding-top: 6rem; /* Optimized for tablet single-row header */
+    }
+  }
+
+  /* Desktop Layout */
+  @media (min-width: 1025px) {
+    .header-center {
+      flex-direction: row;
       justify-content: center;
+    }
+
+    .mobile-only {
+      display: none;
+    }
+
+    .desktop-only {
+      display: flex;
+    }
+
+    .language-button, .location-button {
+      padding: 0.75rem 1.25rem;
+      font-size: 0.9rem;
+      gap: 0.5rem;
+    }
+
+    .lang-flag {
+      font-size: 1.2rem;
+    }
+
+    .lang-code {
+      font-size: 0.8rem;
+    }
+
+    .location-text {
+      font-size: 0.9rem;
+      max-width: 120px;
+    }
+
+    .tab-button {
+      padding: 0.75rem 1.5rem;
+      font-size: 0.95rem;
+    }
+
+    .main-content {
+      padding-top: 6.5rem; /* Optimized for desktop single-row header */
+    }
+  }
+
+  /* Mobile Layout */
+  @media (max-width: 768px) {
+    .header-container {
+      padding: 0.75rem 1rem;
+    }
+
+    .header-left, .header-right {
+      display: none;
+    }
+
+    .header-center {
+      flex: 1;
+      gap: 0.5rem;
+    }
+
+    .header-controls {
+      gap: 0.75rem;
+    }
+
+    .language-button, .location-button {
+      padding: 0.5rem 0.625rem;
+      font-size: 0.8rem;
+      border-radius: 8px;
+      min-height: 42px;
+    }
+
+    .lang-flag {
+      font-size: 1rem;
+    }
+
+    .lang-code {
+      font-size: 0.7rem;
+    }
+
+    .location-text {
+      font-size: 0.8rem;
+      max-width: 80px;
+    }
+
+    .view-tabs {
+      gap: 0.5rem;
+    }
+
+    .tab-button {
+      padding: 0.625rem 1rem;
+      font-size: 0.85rem;
+      min-height: 44px;
     }
 
     .language-menu {
@@ -2578,7 +2786,7 @@
 
     .main-content {
       padding: 0.75rem;
-      padding-top: 8rem;
+      padding-top: 9rem; /* Increased for mobile two-row header */
     }
 
     .weather-main {
