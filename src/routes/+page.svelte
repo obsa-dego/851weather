@@ -29,7 +29,7 @@
   let isSearching = false;
   let loading = true;
   let locationKey = '37.6_126.70001';
-  let activeView = 'overview'; // overview, hourly, weekly
+  let activeView = 'overview'; // overview, hourly, weekly, info851
 
   // Language State
   let showLanguageDropdown = false;
@@ -59,6 +59,7 @@
       overview: '概览',
       hourly: '逐时',
       weekly: '每周',
+      info851: '851weather',
 
       // Weather sections
       todaysForecast: '今日预报',
@@ -122,6 +123,7 @@
       overview: 'अवलोकन',
       hourly: 'घंटेवार',
       weekly: 'साप्ताहिक',
+      info851: '851weather',
 
       // Weather sections
       todaysForecast: 'आज का पूर्वानुमान',
@@ -548,6 +550,7 @@
       overview: '개요',
       hourly: '시간별',
       weekly: '주간',
+      info851: '851weather',
 
       // Weather sections
       todaysForecast: '오늘의 예보',
@@ -1315,6 +1318,13 @@
           >
             {t('weekly')}
           </button>
+          <button
+            class="tab-button"
+            class:active={activeView === 'info851'}
+            on:click={() => activeView = 'info851'}
+          >
+            {t('info851')}
+          </button>
         </nav>
       </div>
 
@@ -1817,6 +1827,99 @@
               </button>
             </div>
           {/each}
+        </div>
+      </div>
+
+    {:else if activeView === 'info851'}
+      <!-- 851weather Info View - Modern Minimal Design -->
+      <div class="info851-view" in:fade={{duration: 500, easing: cubicOut}}>
+        <div class="info851-hero">
+          <div class="info851-brand" in:fly={{y: 30, duration: 800, delay: 200}}>
+            <div class="brand-number">851</div>
+            <div class="brand-text">weather</div>
+            <div class="brand-tagline">Minimalist Weather Experience</div>
+          </div>
+        </div>
+
+        <div class="info851-grid">
+          <!-- Developer Card -->
+          <div class="info-card developer-card" in:fly={{x: -30, duration: 600, delay: 400}}>
+            <div class="card-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M16 18L22 12L16 6"/>
+                <path d="M8 6L2 12L8 18"/>
+                <path d="M12 3L10 21"/>
+              </svg>
+            </div>
+            <div class="card-label">Developed by</div>
+            <div class="card-value">dego</div>
+            <div class="card-decoration"></div>
+          </div>
+
+          <!-- Contact Card -->
+          <div class="info-card contact-card" in:fly={{y: 30, duration: 600, delay: 500}}>
+            <div class="card-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                <polyline points="22,6 12,13 2,6"/>
+              </svg>
+            </div>
+            <div class="card-label">Get in Touch</div>
+            <div class="contact-links">
+              <a href="mailto:00diefiev@gmail.com" class="contact-link email-link">
+                <span class="link-text">00diefiev@gmail.com</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M7 17L17 7"/>
+                  <path d="M7 7h10v10"/>
+                </svg>
+              </a>
+              <a href="https://instagram.com/unpoiam" target="_blank" class="contact-link instagram-link">
+                <span class="link-text">@unpoiam</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M7 17L17 7"/>
+                  <path d="M7 7h10v10"/>
+                </svg>
+              </a>
+            </div>
+            <div class="card-decoration"></div>
+          </div>
+
+          <!-- Tech Stack Card -->
+          <div class="info-card stack-card" in:fly={{x: 30, duration: 600, delay: 600}}>
+            <div class="card-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <path d="M9 9h6v6H9z"/>
+                <path d="M3 9h18"/>
+                <path d="M9 3v18"/>
+                <path d="M15 3v18"/>
+                <path d="M3 15h18"/>
+              </svg>
+            </div>
+            <div class="card-label">Built with</div>
+            <div class="tech-stack">
+              <div class="tech-item">
+                <span class="tech-dot js"></span>
+                JavaScript
+              </div>
+              <div class="tech-item">
+                <span class="tech-dot ts"></span>
+                TypeScript
+              </div>
+              <div class="tech-item">
+                <span class="tech-dot svelte"></span>
+                SvelteKit
+              </div>
+            </div>
+            <div class="card-decoration"></div>
+          </div>
+        </div>
+
+        <!-- Footer Quote -->
+        <div class="info851-footer" in:fade={{duration: 800, delay: 800}}>
+          <div class="footer-line"></div>
+          <p class="footer-quote">© 2024 851weather. All rights reserved.</p>
+          <div class="footer-line"></div>
         </div>
       </div>
     {/if}
@@ -3328,6 +3431,338 @@
 
     .temp-unit {
       font-size: 2rem;
+    }
+  }
+
+  /* 851weather Info Styles - Modern Minimal Design */
+  .info851-view {
+    min-height: calc(100vh - 200px);
+    padding: 4rem 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+
+  /* Hero Section */
+  .info851-hero {
+    margin-bottom: 5rem;
+    text-align: center;
+  }
+
+  .info851-brand {
+    display: inline-block;
+    position: relative;
+  }
+
+  .brand-number {
+    font-size: 6rem;
+    font-weight: 100;
+    letter-spacing: -0.02em;
+    background: linear-gradient(180deg,
+      rgba(255,255,255,1) 0%,
+      rgba(255,255,255,0.4) 100%
+    );
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 0.8;
+    margin-bottom: 0.2rem;
+  }
+
+  .brand-text {
+    font-size: 2.5rem;
+    font-weight: 200;
+    letter-spacing: 0.3em;
+    color: rgba(255,255,255,0.9);
+    text-transform: lowercase;
+    margin-left: 0.2em;
+  }
+
+  .brand-tagline {
+    font-size: 0.85rem;
+    font-weight: 300;
+    letter-spacing: 0.15em;
+    color: rgba(255,255,255,0.4);
+    text-transform: uppercase;
+    margin-top: 1.5rem;
+    position: relative;
+    padding: 0 2rem;
+  }
+
+  .brand-tagline::before,
+  .brand-tagline::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 1.5rem;
+    height: 1px;
+    background: rgba(255,255,255,0.2);
+  }
+
+  .brand-tagline::before {
+    left: 0;
+  }
+
+  .brand-tagline::after {
+    right: 0;
+  }
+
+  /* Grid Layout */
+  .info851-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 2rem;
+    max-width: 1200px;
+    width: 100%;
+    margin-bottom: 4rem;
+  }
+
+  /* Info Cards */
+  .info-card {
+    background: rgba(255,255,255,0.03);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 0;
+    padding: 2.5rem;
+    position: relative;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+  }
+
+  .info-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(255,255,255,0.3) 50%,
+      transparent 100%
+    );
+    transform: scaleX(0);
+    transition: transform 0.4s ease;
+  }
+
+  .info-card:hover::before {
+    transform: scaleX(1);
+  }
+
+  .info-card:hover {
+    background: rgba(255,255,255,0.05);
+    transform: translateY(-4px);
+    border-color: rgba(255,255,255,0.15);
+  }
+
+  .card-decoration {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 60px;
+    height: 1px;
+    background: rgba(255,255,255,0.2);
+    transition: width 0.4s ease;
+  }
+
+  .info-card:hover .card-decoration {
+    width: 100%;
+  }
+
+  .card-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+    color: rgba(255,255,255,0.4);
+    transition: color 0.3s ease;
+  }
+
+  .info-card:hover .card-icon {
+    color: rgba(255,255,255,0.7);
+  }
+
+  .card-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 1rem;
+  }
+
+  .card-value {
+    font-size: 2rem;
+    font-weight: 200;
+    color: rgba(255,255,255,0.95);
+    letter-spacing: -0.02em;
+  }
+
+  /* Contact Links */
+  .contact-links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .contact-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: rgba(255,255,255,0.6);
+    text-decoration: none;
+    font-size: 0.95rem;
+    font-weight: 300;
+    transition: all 0.3s ease;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid transparent;
+    position: relative;
+  }
+
+  .contact-link:hover {
+    color: rgba(255,255,255,0.95);
+    padding-left: 0.5rem;
+  }
+
+  .contact-link svg {
+    opacity: 0;
+    transform: translate(-5px, -5px);
+    transition: all 0.3s ease;
+  }
+
+  .contact-link:hover svg {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+
+  .link-text {
+    flex: 1;
+  }
+
+  /* Tech Stack */
+  .tech-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .tech-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-size: 1.1rem;
+    font-weight: 300;
+    color: rgba(255,255,255,0.7);
+    transition: all 0.3s ease;
+  }
+
+  .tech-item:hover {
+    color: rgba(255,255,255,0.95);
+    transform: translateX(4px);
+  }
+
+  .tech-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.3);
+    transition: all 0.3s ease;
+  }
+
+  .tech-item:hover .tech-dot {
+    width: 20px;
+    border-radius: 2px;
+  }
+
+  .tech-dot.js {
+    background: #f7df1e;
+  }
+
+  .tech-dot.ts {
+    background: #3178c6;
+  }
+
+  .tech-dot.svelte {
+    background: #ff3e00;
+  }
+
+  /* Footer */
+  .info851-footer {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    margin-top: auto;
+    opacity: 0.6;
+  }
+
+  .footer-line {
+    width: 60px;
+    height: 1px;
+    background: rgba(255,255,255,0.2);
+  }
+
+  .footer-quote {
+    font-size: 0.85rem;
+    font-weight: 300;
+    font-style: italic;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 0.05em;
+    margin: 0;
+  }
+
+  /* Responsive Design */
+  @media (max-width: 1024px) {
+    .info851-grid {
+      grid-template-columns: 1fr;
+      max-width: 500px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .info851-view {
+      padding: 3rem 1.5rem;
+    }
+
+    .brand-number {
+      font-size: 4rem;
+    }
+
+    .brand-text {
+      font-size: 1.8rem;
+    }
+
+    .info-card {
+      padding: 2rem;
+    }
+
+    .card-value {
+      font-size: 1.5rem;
+    }
+
+    .footer-line {
+      width: 30px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .brand-number {
+      font-size: 3rem;
+    }
+
+    .brand-text {
+      font-size: 1.5rem;
+      letter-spacing: 0.2em;
+    }
+
+    .brand-tagline {
+      font-size: 0.75rem;
+    }
+
+    .info851-grid {
+      gap: 1.5rem;
     }
   }
 </style>

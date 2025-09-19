@@ -56,14 +56,7 @@ declare module '$env/static/private' {
 	export const DISPLAY: string;
 	export const DriverData: string;
 	export const EDITOR: string;
-	export const EFC_11956_1262719628: string;
-	export const EFC_11956_1592913036: string;
-	export const EFC_11956_2283032206: string;
-	export const EFC_11956_2775293581: string;
-	export const EFC_11956_3789132940: string;
 	export const EXEPATH: string;
-	export const FPS_BROWSER_APP_PROFILE_STRING: string;
-	export const FPS_BROWSER_USER_PROFILE_STRING: string;
 	export const GIT_EDITOR: string;
 	export const HOME: string;
 	export const HOMEDRIVE: string;
@@ -152,8 +145,10 @@ declare module '$env/static/private' {
 	export const USERNAME: string;
 	export const USERPROFILE: string;
 	export const VBOX_HWVIRTEX_IGNORE_SVM_IN_USE: string;
-	export const VIPSHOME: string;
 	export const WINDIR: string;
+	export const WSLENV: string;
+	export const WT_PROFILE_ID: string;
+	export const WT_SESSION: string;
 	export const _: string;
 }
 
@@ -214,14 +209,7 @@ declare module '$env/dynamic/private' {
 		DISPLAY: string;
 		DriverData: string;
 		EDITOR: string;
-		EFC_11956_1262719628: string;
-		EFC_11956_1592913036: string;
-		EFC_11956_2283032206: string;
-		EFC_11956_2775293581: string;
-		EFC_11956_3789132940: string;
 		EXEPATH: string;
-		FPS_BROWSER_APP_PROFILE_STRING: string;
-		FPS_BROWSER_USER_PROFILE_STRING: string;
 		GIT_EDITOR: string;
 		HOME: string;
 		HOMEDRIVE: string;
@@ -310,8 +298,10 @@ declare module '$env/dynamic/private' {
 		USERNAME: string;
 		USERPROFILE: string;
 		VBOX_HWVIRTEX_IGNORE_SVM_IN_USE: string;
-		VIPSHOME: string;
 		WINDIR: string;
+		WSLENV: string;
+		WT_PROFILE_ID: string;
+		WT_SESSION: string;
 		_: string;
 		[key: `PUBLIC_${string}`]: undefined;
 		[key: `${string}`]: string | undefined;
