@@ -11,6 +11,7 @@
   let windSpeed = 0;
   let location = 'Gimpo, Korea';
   let currentWeatherCode = 0;
+  let currentPrecipitation = 0;
 
   // 7-day forecast data
   let sevenDayForecast = [];
@@ -46,7 +47,7 @@
     { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
     { code: 'ko', name: '한국어', flag: '🇰🇷' }
   ];
-  let selectedLanguage = supportedLanguages[2]; // Default to English
+  let selectedLanguage = supportedLanguages[11]; // Default to Korean
 
   // Translation data
   const translations = {
@@ -67,7 +68,9 @@
       // Weather details
       temp: '温度',
       feels: '体感',
-      rain: '降雨',
+      rain: '降水确率/降水量',
+      precipitation: '降水量',
+      mm: '毫米',
       wind: '风',
       humidity: '湿度',
       pm10: 'PM10',
@@ -97,7 +100,7 @@
       partlyCloudy: '部分多云',
       cloudy: '多云',
       overcast: '阴天',
-      rain: '雨',
+      rainyWeather: '雨',
       lightRain: '小雨',
       heavyRain: '大雨',
       snow: '雪',
@@ -128,7 +131,9 @@
       // Weather details
       temp: 'तापमान',
       feels: 'महसूस',
-      rain: 'बारिश',
+      rain: 'वर्षा संभावना/वर्षा',
+      precipitation: 'वर्षा',
+      mm: 'मिमी',
       wind: 'हवा',
       humidity: 'नमी',
       pm10: 'PM10',
@@ -158,7 +163,7 @@
       partlyCloudy: 'आंशिक बादल',
       cloudy: 'बादल',
       overcast: 'घना बादल',
-      rain: 'बारिश',
+      rain: 'वर्षा संभावना/वर्षा',
       lightRain: 'हल्की बारिश',
       heavyRain: 'भारी बारिश',
       snow: 'बर्फ',
@@ -189,7 +194,9 @@
       // Weather details
       temp: 'Temp',
       feels: 'Sensación',
-      rain: 'Lluvia',
+      rain: 'Precipitación',
+      precipitation: 'Precipitación',
+      mm: 'mm',
       wind: 'Viento',
       humidity: 'Humedad',
       pm10: 'PM10',
@@ -219,7 +226,7 @@
       partlyCloudy: 'Parcialmente Nublado',
       cloudy: 'Nublado',
       overcast: 'Encapotado',
-      rain: 'Lluvia',
+      rain: 'Precipitación',
       lightRain: 'Lluvia Ligera',
       heavyRain: 'Lluvia Intensa',
       snow: 'Nieve',
@@ -250,7 +257,9 @@
       // Weather details
       temp: 'درجة الحرارة',
       feels: 'الشعور',
-      rain: 'المطر',
+      rain: 'هطول الأمطار',
+      precipitation: 'هطول الأمطار',
+      mm: 'مم',
       wind: 'الرياح',
       humidity: 'الرطوبة',
       pm10: 'PM10',
@@ -308,7 +317,9 @@
       // Weather details
       temp: 'তাপমাত্রা',
       feels: 'অনুভূতি',
-      rain: 'বৃষ্টি',
+      rain: 'বৃষ্টি সম্ভাবনা/পরিমাণ',
+      precipitation: 'বৃষ্টিপাত',
+      mm: 'মিমি',
       wind: 'বাতাস',
       humidity: 'আর্দ্রতা',
       pm10: 'PM10',
@@ -335,7 +346,7 @@
       partlyCloudy: 'আংশিক মেঘলা',
       cloudy: 'মেঘলা',
       overcast: 'ঘন মেঘ',
-      rain: 'বৃষ্টি',
+      rain: 'বৃষ্টি সম্ভাবনা/পরিমাণ',
       lightRain: 'হালকা বৃষ্টি',
       heavyRain: 'ভারী বৃষ্টি',
       snow: 'তুষার',
@@ -366,7 +377,9 @@
       // Weather details
       temp: 'Темп',
       feels: 'Ощущается',
-      rain: 'Дождь',
+      rain: 'Осадки',
+      precipitation: 'Осадки',
+      mm: 'мм',
       wind: 'Ветер',
       humidity: 'Влажность',
       pm10: 'PM10',
@@ -393,7 +406,7 @@
       partlyCloudy: 'Переменная облачность',
       cloudy: 'Облачно',
       overcast: 'Пасмурно',
-      rain: 'Дождь',
+      rain: 'Осадки',
       lightRain: 'Легкий дождь',
       heavyRain: 'Сильный дождь',
       snow: 'Снег',
@@ -424,7 +437,9 @@
       // Weather details
       temp: 'Temp',
       feels: 'Ressenti',
-      rain: 'Pluie',
+      rain: 'Précipitations',
+      precipitation: 'Précipitations',
+      mm: 'mm',
       wind: 'Vent',
       humidity: 'Humidité',
       pm10: 'PM10',
@@ -451,7 +466,7 @@
       partlyCloudy: 'Partiellement nuageux',
       cloudy: 'Nuageux',
       overcast: 'Couvert',
-      rain: 'Pluie',
+      rain: 'Précipitations',
       lightRain: 'Pluie légère',
       heavyRain: 'Pluie forte',
       snow: 'Neige',
@@ -482,7 +497,9 @@
       // Weather details
       temp: 'Temp',
       feels: 'Gefühlt',
-      rain: 'Regen',
+      rain: 'Niederschlag',
+      precipitation: 'Niederschlag',
+      mm: 'mm',
       wind: 'Wind',
       humidity: 'Feuchtigkeit',
       pm10: 'PM10',
@@ -509,7 +526,7 @@
       partlyCloudy: 'Teilweise bewölkt',
       cloudy: 'Bewölkt',
       overcast: 'Bedeckt',
-      rain: 'Regen',
+      rain: 'Niederschlag',
       lightRain: 'Leichter Regen',
       heavyRain: 'Starker Regen',
       snow: 'Schnee',
@@ -540,7 +557,9 @@
       // Weather details
       temp: '온도',
       feels: '체감',
-      rain: '강수',
+      rain: '강수확률/강수량',
+      precipitation: '강수량',
+      mm: 'mm',
       wind: '바람',
       humidity: '습도',
       pm10: '미세먼지',
@@ -570,7 +589,7 @@
       partlyCloudy: '부분적으로 흐림',
       cloudy: '흐림',
       overcast: '흐림',
-      rain: '비',
+      rainyWeather: '비',
       lightRain: '가벼운 비',
       heavyRain: '큰 비',
       snow: '눈',
@@ -601,7 +620,9 @@
       // Weather details
       temp: '気温',
       feels: '体感',
-      rain: '降水',
+      rain: '降水確率/降水量',
+      precipitation: '降水量',
+      mm: 'mm',
       wind: '風',
       humidity: '湿度',
       pm10: 'PM10',
@@ -628,7 +649,7 @@
       partlyCloudy: '部分的に曇り',
       cloudy: '曇り',
       overcast: '曇り',
-      rain: '雨',
+      rainyWeather: '雨',
       lightRain: '小雨',
       heavyRain: '大雨',
       snow: '雪',
@@ -659,7 +680,9 @@
       // Weather details
       temp: 'Temp',
       feels: 'Feels',
-      rain: 'Rain',
+      rain: 'Precipitation',
+      precipitation: 'Precipitation',
+      mm: 'mm',
       wind: 'Wind',
       humidity: 'Humidity',
       pm10: 'PM10',
@@ -689,7 +712,7 @@
       partlyCloudy: 'Partly Cloudy',
       cloudy: 'Cloudy',
       overcast: 'Overcast',
-      rain: 'Rain',
+      rain: 'Precipitation',
       lightRain: 'Light Rain',
       heavyRain: 'Heavy Rain',
       snow: 'Snow',
@@ -720,7 +743,9 @@
       // Weather details
       temp: 'Temp',
       feels: 'Sensação',
-      rain: 'Chuva',
+      rain: 'Precipitação',
+      precipitation: 'Precipitação',
+      mm: 'mm',
       wind: 'Vento',
       humidity: 'Umidade',
       pm10: 'PM10',
@@ -747,7 +772,7 @@
       partlyCloudy: 'Parcialmente Nublado',
       cloudy: 'Nublado',
       overcast: 'Encoberto',
-      rain: 'Chuva',
+      rain: 'Precipitação',
       lightRain: 'Chuva Leve',
       heavyRain: 'Chuva Forte',
       snow: 'Neve',
@@ -861,6 +886,7 @@
           weatherCondition = current.WeatherText;
           windSpeed = Math.round(current.Wind?.Speed?.Metric?.Value || 0);
           currentWeatherCode = current.WeatherIcon || 0;
+          currentPrecipitation = current.Precipitation?.Metric?.Value || 0;
         }
       }
 
@@ -879,6 +905,7 @@
             dateTime: h.DateTime,
             date: new Date(h.DateTime).toDateString(),
             precipitation: h.PrecipitationProbability || 0,
+            precipitationAmount: h.Precipitation?.Value || 0,
             pm10: 0,
             pm25: 0
           }));
@@ -926,6 +953,7 @@
               high: Math.round(d.Temperature?.Maximum?.Value || 0),
               low: Math.round(d.Temperature?.Minimum?.Value || 0),
               precipitation: d.Day?.PrecipitationProbability || 0,
+              precipitationAmount: d.Precipitation?.Sum || 0,
               icon: getWeatherIcon(d.Day?.Icon || 0)
             };
           });
@@ -1239,6 +1267,11 @@
                   </svg>
                   {windSpeed} km/h
                 </span>
+                {#if currentPrecipitation > 0}
+                  <span class="detail-item">
+                    🌧️ {currentPrecipitation.toFixed(1)} {t('mm')}
+                  </span>
+                {/if}
                 {#if hourlyForecast[0]}
                   <span class="detail-item">
                     💧 {hourlyForecast[0].precipitation}%
@@ -1306,7 +1339,12 @@
 
                   <div class="precipitation-info">
                     <span class="precip-label">{t('rain')}</span>
-                    <span class="precip-value">{hour.precipitation}%</span>
+                    <span class="precip-value">
+                      {hour.precipitation}%
+                      {#if hour.precipitation > 0}
+                        ({hour.precipitationAmount.toFixed(1)}{t('mm')})
+                      {/if}
+                    </span>
                   </div>
 
                   <div class="air-info">
@@ -1344,8 +1382,11 @@
                   <span class="temp-high">{day.high}°</span>
                   <span class="temp-low">{day.low}°</span>
                 </div>
-                {#if day.precipitation > 0}
-                  <div class="day-rain">💧{day.precipitation}%</div>
+                {#if day.precipitation > 0 || day.precipitationAmount > 0}
+                  <div class="day-rain">
+                    💧{day.precipitation}%
+                    <span style="font-size: 0.8em;">({day.precipitationAmount.toFixed(1)}{t('mm')})</span>
+                  </div>
                 {/if}
               </button>
             {/each}
@@ -1393,10 +1434,13 @@
                     </div>
                   </div>
 
-                  {#if hour.precipitation > 0}
+                  {#if hour.precipitation > 0 || hour.precipitationAmount > 0}
                     <div class="precipitation-info">
                       <span class="precip-label">{t('rain')}</span>
-                      <span class="precip-value">{hour.precipitation}%</span>
+                      <span class="precip-value">
+                        {hour.precipitation}%
+                        ({hour.precipitationAmount.toFixed(1)}{t('mm')})
+                      </span>
                     </div>
                   {/if}
 
@@ -1449,7 +1493,7 @@
                 </div>
               </div>
 
-              {#if day.precipitation > 0}
+              {#if day.precipitation > 0 || day.precipitationAmount > 0}
                 <div class="week-day-rain">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M16 13V11C16 8.24 13.76 6 11 6S6 8.24 6 11V13"/>
@@ -1457,7 +1501,10 @@
                     <path d="M8 17L8 21"/>
                     <path d="M16 17L16 21"/>
                   </svg>
-                  <span>{day.precipitation}% {t('chanceOfRain')}</span>
+                  <span>
+                    {day.precipitation}% {t('chanceOfRain')}
+                    ({day.precipitationAmount.toFixed(1)}{t('mm')})
+                  </span>
                 </div>
               {/if}
 

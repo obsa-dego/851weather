@@ -42,7 +42,9 @@ export async function GET({ url }) {
 
 			console.log('Open-Meteo Air Quality Current URL:', currentUrl);
 
-			const response = await fetch(currentUrl);
+			const response = await fetch(currentUrl, {
+				signal: AbortSignal.timeout(15000) // 15초 타임아웃
+			});
 
 			if (!response.ok) {
 				throw error(response.status, `Air quality fetch failed: ${response.status}`);
@@ -94,7 +96,9 @@ export async function GET({ url }) {
 
 			console.log('Open-Meteo Air Quality Hourly URL:', hourlyUrl);
 
-			const response = await fetch(hourlyUrl);
+			const response = await fetch(hourlyUrl, {
+				signal: AbortSignal.timeout(15000) // 15초 타임아웃
+			});
 
 			if (!response.ok) {
 				throw error(response.status, `Hourly air quality fetch failed: ${response.status}`);
