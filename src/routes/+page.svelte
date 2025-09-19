@@ -1444,7 +1444,67 @@
         <!-- Today's Hourly Preview -->
         <div class="today-hourly">
           <h3 class="section-title">{t('todaysForecast')}</h3>
-          <div class="hourly-preview-detailed">
+
+          <!-- Desktop: Time Period Sections -->
+          <div class="hourly-preview-detailed desktop-layout">
+            {#each Object.entries(groupHourlyDataByTimePeriod(hourlyForecast)) as [periodKey, period]}
+              {#if period.hours.length > 0}
+                <div class="time-period-section">
+                  <h4 class="period-header">{period.label}</h4>
+                  <div class="period-grid">
+                    {#each period.hours as hour, i}
+                      {@const pm10HourGrade = getDetailedAirQualityGrade(hour.pm10, 'PM10')}
+                      {@const pm25HourGrade = getDetailedAirQualityGrade(hour.pm25, 'PM2.5')}
+                      <div class="hour-detail-card" in:fly={{y: 20, delay: i * 20, duration: 300}}>
+                        <div class="hour-header">
+                          <span class="hour-time-label">{hour.time}</span>
+                          <span class="hour-weather-icon">{hour.icon}</span>
+                        </div>
+                        <div class="hour-body">
+                          <div class="temp-info">
+                            <div class="actual-temp">
+                              <span class="temp-label">{t('temp')}</span>
+                              <span class="temp-val">{hour.temp}°</span>
+                            </div>
+                            <div class="feels-temp">
+                              <span class="temp-label">{t('feels')}</span>
+                              <span class="temp-val">{hour.feelsLike}°</span>
+                            </div>
+                          </div>
+
+                          {#if hour.precipitation > 0 || hour.precipitationAmount > 0}
+                            <div class="precipitation-info">
+                              <span class="precip-label">{t('rain')}</span>
+                              <span class="precip-value">
+                                {hour.precipitation}%
+                                ({hour.precipitationAmount.toFixed(1)}{t('mm')})
+                              </span>
+                            </div>
+                          {/if}
+
+                          <div class="air-info">
+                            <div class="air-metric">
+                              <span class="metric-label">{t('pm10')}</span>
+                              <span class="metric-value">{hour.pm10}</span>
+                              <span class="metric-grade" style="color: {pm10HourGrade.color}; font-size: 0.7rem;">{t(pm10HourGrade.grade)}</span>
+                            </div>
+                            <div class="air-metric">
+                              <span class="metric-label">{t('pm25')}</span>
+                              <span class="metric-value">{hour.pm25}</span>
+                              <span class="metric-grade" style="color: {pm25HourGrade.color}; font-size: 0.7rem;">{t(pm25HourGrade.grade)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+            {/each}
+          </div>
+
+          <!-- Mobile: 2x Grid Layout -->
+          <div class="hourly-preview-detailed mobile-layout">
             {#each hourlyForecast as hour, i}
               {@const pm10HourGrade = getDetailedAirQualityGrade(hour.pm10, 'PM10')}
               {@const pm25HourGrade = getDetailedAirQualityGrade(hour.pm25, 'PM2.5')}
@@ -2153,9 +2213,16 @@
   }
 
   .hourly-preview-detailed {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 1rem;
+    display: block;
+    width: 100%;
+  }
+
+  .hourly-preview-detailed.desktop-layout {
+    display: block;
+  }
+
+  .hourly-preview-detailed.mobile-layout {
+    display: none;
   }
 
   .hour-detail-card-overview {
@@ -3182,7 +3249,12 @@
       justify-content: center;
     }
 
-    .hourly-preview-detailed {
+    .hourly-preview-detailed.desktop-layout {
+      display: none;
+    }
+
+    .hourly-preview-detailed.mobile-layout {
+      display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 0.75rem;
     }
