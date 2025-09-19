@@ -3183,7 +3183,13 @@
     }
 
     .hourly-preview-detailed {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.75rem;
+    }
+
+    .hourly-preview-detailed .hour-detail-card-overview {
+      padding: 0.75rem;
+      height: auto;
     }
 
     .days-grid {
