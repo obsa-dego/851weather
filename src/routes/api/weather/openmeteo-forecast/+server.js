@@ -62,7 +62,7 @@ export async function GET({ url }) {
 
 		if (type === 'daily') {
 			// 일별 예보
-			const dailyUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,relative_humidity_2m_mean&timezone=Asia/Seoul&forecast_days=${days}`;
+			const dailyUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,rain_sum,showers_sum,snowfall_sum,relative_humidity_2m_mean&timezone=Asia/Seoul&forecast_days=${days}`;
 
 			console.log('Open-Meteo Daily URL:', dailyUrl);
 
@@ -93,6 +93,18 @@ export async function GET({ url }) {
 					RelativeHumidity: {
 						Average: data.daily.relative_humidity_2m_mean[index] || null
 					}
+				},
+				Precipitation: {
+					Sum: data.daily.precipitation_sum[index] || 0
+				},
+				Rain: {
+					Sum: data.daily.rain_sum[index] || 0
+				},
+				Showers: {
+					Sum: data.daily.showers_sum[index] || 0
+				},
+				Snowfall: {
+					Sum: data.daily.snowfall_sum[index] || 0
 				}
 			}));
 
@@ -105,7 +117,7 @@ export async function GET({ url }) {
 			const hoursToRequest = Math.min(hours, 384); // 최대 384시간(16일)
 			const daysToRequest = Math.ceil(hoursToRequest / 24);
 
-			const hourlyUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&hourly=temperature_2m,apparent_temperature,precipitation_probability,weather_code,relative_humidity_2m,wind_speed_10m&timezone=Asia/Seoul&forecast_days=${Math.min(daysToRequest, 16)}`;
+			const hourlyUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,rain,showers,snowfall,weather_code,relative_humidity_2m,wind_speed_10m&timezone=Asia/Seoul&forecast_days=${Math.min(daysToRequest, 16)}`;
 
 			console.log('Open-Meteo Hourly URL:', hourlyUrl);
 
@@ -132,6 +144,18 @@ export async function GET({ url }) {
 					Value: data.hourly.apparent_temperature[index]
 				},
 				PrecipitationProbability: data.hourly.precipitation_probability[index] || 0,
+				Precipitation: {
+					Value: data.hourly.precipitation[index] || 0
+				},
+				Rain: {
+					Value: data.hourly.rain[index] || 0
+				},
+				Showers: {
+					Value: data.hourly.showers[index] || 0
+				},
+				Snowfall: {
+					Value: data.hourly.snowfall[index] || 0
+				},
 				WeatherIcon: data.hourly.weather_code[index],
 				WeatherText: getWeatherDescription(data.hourly.weather_code[index]),
 				IsDaylight: isDaylight(time),

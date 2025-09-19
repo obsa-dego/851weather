@@ -15,7 +15,7 @@ export async function GET({ url }) {
 			throw error(400, 'Invalid location key format');
 		}
 
-		const currentUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m&timezone=Asia/Seoul`;
+		const currentUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m,precipitation,rain,showers,snowfall&timezone=Asia/Seoul`;
 
 		console.log('Open-Meteo Current URL:', currentUrl);
 
@@ -97,6 +97,26 @@ export async function GET({ url }) {
 					Degrees: data.current.wind_direction_10m,
 					Localized: getWindDirection(data.current.wind_direction_10m),
 					English: getWindDirection(data.current.wind_direction_10m)
+				}
+			},
+			Precipitation: {
+				Metric: {
+					Value: data.current.precipitation || 0
+				}
+			},
+			Rain: {
+				Metric: {
+					Value: data.current.rain || 0
+				}
+			},
+			Showers: {
+				Metric: {
+					Value: data.current.showers || 0
+				}
+			},
+			Snowfall: {
+				Metric: {
+					Value: data.current.snowfall || 0
 				}
 			},
 			DateTime: new Date().toISOString(),

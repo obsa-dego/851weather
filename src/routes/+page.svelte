@@ -1137,22 +1137,7 @@
 <div class="weather-app">
   <!-- Header -->
   <header class="app-header">
-    <div class="header-left">
-      <div class="current-date">{currentDate}</div>
-      <div class="current-time">{currentTime}</div>
-    </div>
-
     <div class="header-center">
-      <button class="location-button" on:click={openLocationSearch}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-          <circle cx="12" cy="9" r="2.5"/>
-        </svg>
-        <span>{location}</span>
-      </button>
-    </div>
-
-    <div class="header-right">
       <!-- Language Dropdown -->
       <div class="language-dropdown" class:open={showLanguageDropdown}>
         <button class="language-button" on:click={toggleLanguageDropdown}>
@@ -1195,32 +1180,42 @@
           </div>
         {/if}
       </div>
-
-      <!-- View Tabs -->
-      <nav class="view-tabs">
-        <button
-          class="tab-button"
-          class:active={activeView === 'overview'}
-          on:click={() => activeView = 'overview'}
-        >
-          {t('overview')}
-        </button>
-        <button
-          class="tab-button"
-          class:active={activeView === 'hourly'}
-          on:click={() => activeView = 'hourly'}
-        >
-          {t('hourly')}
-        </button>
-        <button
-          class="tab-button"
-          class:active={activeView === 'weekly'}
-          on:click={() => activeView = 'weekly'}
-        >
-          {t('weekly')}
-        </button>
-      </nav>
     </div>
+
+    <div class="header-right">
+      <button class="location-button" on:click={openLocationSearch}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+          <circle cx="12" cy="9" r="2.5"/>
+        </svg>
+        <span>{location}</span>
+      </button>
+    </div>
+
+    <!-- View Tabs -->
+    <nav class="view-tabs">
+      <button
+        class="tab-button"
+        class:active={activeView === 'overview'}
+        on:click={() => activeView = 'overview'}
+      >
+        {t('overview')}
+      </button>
+      <button
+        class="tab-button"
+        class:active={activeView === 'hourly'}
+        on:click={() => activeView = 'hourly'}
+      >
+        {t('hourly')}
+      </button>
+      <button
+        class="tab-button"
+        class:active={activeView === 'weekly'}
+        on:click={() => activeView = 'weekly'}
+      >
+        {t('weekly')}
+      </button>
+    </nav>
   </header>
 
   <!-- Main Content -->
@@ -1250,6 +1245,10 @@
                   </span>
                 {/if}
               </div>
+            </div>
+            <div class="date-time-info">
+              <div class="current-date">{currentDate}</div>
+              <div class="current-time">{currentTime}</div>
             </div>
           </div>
 
@@ -1531,7 +1530,8 @@
     margin: 0;
     padding: 0;
     height: 100%;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   :global(body) {
@@ -1544,12 +1544,16 @@
     box-sizing: border-box;
   }
 
+  :global(*), :global(*::before), :global(*::after) {
+    max-width: 100%;
+  }
+
   .weather-app {
-    height: 100vh;
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
     background: linear-gradient(180deg, #0a0a0a 0%, #1a1a1a 100%);
-    overflow: hidden;
+    overflow-x: hidden;
   }
 
   /* Header */
@@ -1558,23 +1562,23 @@
     justify-content: space-between;
     align-items: center;
     padding: 1.5rem 2rem;
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(10px);
+    background: rgba(10, 10, 10, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    position: relative;
+    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.5);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
     z-index: 10000;
   }
 
-  .header-left, .header-right {
+  .header-right {
     flex: 1;
     display: flex;
     align-items: center;
-  }
-
-  .header-left {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.25rem;
   }
 
   .header-center {
@@ -1655,6 +1659,7 @@
     overflow-y: auto;
     overflow-x: hidden;
     padding: 2rem;
+    padding-top: 10rem;
   }
 
   /* Scrollbar styling */
@@ -1692,6 +1697,27 @@
     align-items: center;
     gap: 3rem;
     margin-bottom: 2rem;
+    justify-content: space-between;
+  }
+
+  .date-time-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+  }
+
+  .current-date {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .current-time {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #ffffff;
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, monospace;
   }
 
   .temp-display {
@@ -2386,7 +2412,7 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 1rem;
     padding: 0.5rem;
-    z-index: 9999;
+    z-index: 10001;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
   }
 
@@ -2471,30 +2497,24 @@
   /* Responsive */
   @media (max-width: 768px) {
     .app-header {
-      flex-direction: column;
-      gap: 1rem;
+      flex-direction: row;
+      gap: 0.5rem;
       padding: 1rem;
+      justify-content: space-between;
     }
 
-    .header-left, .header-center, .header-right {
-      width: 100%;
-      justify-content: center;
-    }
-
-    .header-left {
+    .header-center, .header-right {
+      flex: 1;
+      display: flex;
       align-items: center;
-      order: 2;
     }
 
     .header-center {
-      order: 1;
-      margin-bottom: 0.5rem;
+      justify-content: center;
     }
 
     .header-right {
-      order: 3;
-      flex-direction: column;
-      gap: 1rem;
+      justify-content: flex-end;
     }
 
     .view-tabs {
@@ -2510,13 +2530,26 @@
     }
 
     .main-content {
-      padding: 1rem;
+      padding: 0.75rem;
+      padding-top: 8rem;
     }
 
     .weather-main {
       flex-direction: column;
       text-align: center;
       gap: 1.5rem;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .date-time-info {
+      text-align: center;
+      width: 100%;
+      order: -1;
+    }
+
+    .current-weather-card {
+      padding: 1.5rem;
     }
 
     .weather-details {
