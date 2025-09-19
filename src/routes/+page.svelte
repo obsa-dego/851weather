@@ -1160,6 +1160,71 @@
     selectedDay = index;
     updateHourlyForecastForDay(index);
   }
+
+  // 시간대별 그룹핑 함수
+  function groupHourlyDataByTimePeriod(data) {
+    const periods = {
+      dawn: { label: '새벽 (00-06시)', hours: [], range: [0, 6] },
+      morning: { label: '오전 (06-12시)', hours: [], range: [6, 12] },
+      afternoon: { label: '오후 (12-18시)', hours: [], range: [12, 18] },
+      evening: { label: '저녁 (18-24시)', hours: [], range: [18, 24] }
+    };
+
+    data.forEach(hour => {
+      const hourNum = new Date(hour.dateTime).getHours();
+
+      if (hourNum >= 0 && hourNum < 6) {
+        periods.dawn.hours.push(hour);
+      } else if (hourNum >= 6 && hourNum < 12) {
+        periods.morning.hours.push(hour);
+      } else if (hourNum >= 12 && hourNum < 18) {
+        periods.afternoon.hours.push(hour);
+      } else {
+        periods.evening.hours.push(hour);
+      }
+    });
+
+    return periods;
+  }
+
+  // AM/PM 그룹핑 함수 (태블릿용)
+  function groupHourlyDataByAMPM(data) {
+    const periods = {
+      am: { label: 'AM (00-12시)', hours: [] },
+      pm: { label: 'PM (12-24시)', hours: [] }
+    };
+
+    data.forEach(hour => {
+      const hourNum = new Date(hour.dateTime).getHours();
+
+      if (hourNum < 12) {
+        periods.am.hours.push(hour);
+      } else {
+        periods.pm.hours.push(hour);
+      }
+    });
+
+    return periods;
+  }
+
+  // 현재 시간 찾기
+  function getCurrentTimeIndex(data) {
+    const now = new Date();
+    const nowTime = now.getTime();
+
+    let closestIndex = 0;
+    let minDiff = Math.abs(new Date(data[0]?.dateTime || 0).getTime() - nowTime);
+
+    for (let i = 1; i < data.length; i++) {
+      const diff = Math.abs(new Date(data[i].dateTime).getTime() - nowTime);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestIndex = i;
+      }
+    }
+
+    return closestIndex;
+  }
 </script>
 
 <div class="weather-app">
@@ -1476,11 +1541,128 @@
 
         <!-- Hourly Details -->
         <div class="hourly-details">
-          <div class="hourly-grid">
+          <!-- Desktop: Time Period Sections -->
+          <div class="time-periods desktop-layout">
+            {#each Object.entries(groupHourlyDataByTimePeriod(hourlyForecast)) as [periodKey, period]}
+              {#if period.hours.length > 0}
+                <div class="time-period-section">
+                  <h3 class="period-header">{period.label}</h3>
+                  <div class="period-grid">
+                    {#each period.hours as hour, i}
+                      {@const pm10HourGrade = getDetailedAirQualityGrade(hour.pm10, 'PM10')}
+                      {@const pm25HourGrade = getDetailedAirQualityGrade(hour.pm25, 'PM2.5')}
+                      <div class="hour-detail-card" in:fly={{y: 20, delay: i * 20, duration: 300}}>
+                        <div class="hour-header">
+                          <span class="hour-time-label">{hour.time}</span>
+                          <span class="hour-weather-icon">{hour.icon}</span>
+                        </div>
+                        <div class="hour-body">
+                          <div class="temp-info">
+                            <div class="actual-temp">
+                              <span class="temp-label">{t('temp')}</span>
+                              <span class="temp-val">{hour.temp}°</span>
+                            </div>
+                            <div class="feels-temp">
+                              <span class="temp-label">{t('feels')}</span>
+                              <span class="temp-val">{hour.feelsLike}°</span>
+                            </div>
+                          </div>
+
+                          {#if hour.precipitation > 0 || hour.precipitationAmount > 0}
+                            <div class="precipitation-info">
+                              <span class="precip-label">{t('rain')}</span>
+                              <span class="precip-value">
+                                {hour.precipitation}%
+                                ({hour.precipitationAmount.toFixed(1)}{t('mm')})
+                              </span>
+                            </div>
+                          {/if}
+
+                          <div class="air-info">
+                            <div class="air-metric">
+                              <span class="metric-label">{t('pm10')}</span>
+                              <span class="metric-value">{hour.pm10}</span>
+                              <span class="metric-grade" style="color: {pm10HourGrade.color}; font-size: 0.7rem;">{t(pm10HourGrade.grade)}</span>
+                            </div>
+                            <div class="air-metric">
+                              <span class="metric-label">{t('pm25')}</span>
+                              <span class="metric-value">{hour.pm25}</span>
+                              <span class="metric-grade" style="color: {pm25HourGrade.color}; font-size: 0.7rem;">{t(pm25HourGrade.grade)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+            {/each}
+          </div>
+
+          <!-- Tablet: AM/PM Sections -->
+          <div class="am-pm-periods tablet-layout">
+            {#each Object.entries(groupHourlyDataByAMPM(hourlyForecast)) as [periodKey, period]}
+              {#if period.hours.length > 0}
+                <div class="ampm-period-section">
+                  <h3 class="period-header">{period.label}</h3>
+                  <div class="period-grid">
+                    {#each period.hours as hour, i}
+                      {@const pm10HourGrade = getDetailedAirQualityGrade(hour.pm10, 'PM10')}
+                      {@const pm25HourGrade = getDetailedAirQualityGrade(hour.pm25, 'PM2.5')}
+                      <div class="hour-detail-card" in:fly={{y: 20, delay: i * 20, duration: 300}}>
+                        <div class="hour-header">
+                          <span class="hour-time-label">{hour.time}</span>
+                          <span class="hour-weather-icon">{hour.icon}</span>
+                        </div>
+                        <div class="hour-body">
+                          <div class="temp-info">
+                            <div class="actual-temp">
+                              <span class="temp-label">{t('temp')}</span>
+                              <span class="temp-val">{hour.temp}°</span>
+                            </div>
+                            <div class="feels-temp">
+                              <span class="temp-label">{t('feels')}</span>
+                              <span class="temp-val">{hour.feelsLike}°</span>
+                            </div>
+                          </div>
+
+                          {#if hour.precipitation > 0 || hour.precipitationAmount > 0}
+                            <div class="precipitation-info">
+                              <span class="precip-label">{t('rain')}</span>
+                              <span class="precip-value">
+                                {hour.precipitation}%
+                                ({hour.precipitationAmount.toFixed(1)}{t('mm')})
+                              </span>
+                            </div>
+                          {/if}
+
+                          <div class="air-info">
+                            <div class="air-metric">
+                              <span class="metric-label">{t('pm10')}</span>
+                              <span class="metric-value">{hour.pm10}</span>
+                              <span class="metric-grade" style="color: {pm10HourGrade.color}; font-size: 0.7rem;">{t(pm10HourGrade.grade)}</span>
+                            </div>
+                            <div class="air-metric">
+                              <span class="metric-label">{t('pm25')}</span>
+                              <span class="metric-value">{hour.pm25}</span>
+                              <span class="metric-grade" style="color: {pm25HourGrade.color}; font-size: 0.7rem;">{t(pm25HourGrade.grade)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+            {/each}
+          </div>
+
+          <!-- Mobile: Horizontal Timeline -->
+          <div class="hourly-timeline mobile-layout">
             {#each hourlyForecast as hour, i}
               {@const pm10HourGrade = getDetailedAirQualityGrade(hour.pm10, 'PM10')}
               {@const pm25HourGrade = getDetailedAirQualityGrade(hour.pm25, 'PM2.5')}
-              <div class="hour-detail-card" in:fly={{y: 20, delay: i * 20, duration: 300}}>
+              <div class="hour-detail-card-overview" in:fly={{x: 20, delay: i * 10, duration: 200}}>
                 <div class="hour-header">
                   <span class="hour-time-label">{hour.time}</span>
                   <span class="hour-weather-icon">{hour.icon}</span>
@@ -1488,35 +1670,28 @@
                 <div class="hour-body">
                   <div class="temp-info">
                     <div class="actual-temp">
-                      <span class="temp-label">{t('temp')}</span>
+                      <span class="temp-label">온도</span>
                       <span class="temp-val">{hour.temp}°</span>
                     </div>
                     <div class="feels-temp">
-                      <span class="temp-label">{t('feels')}</span>
+                      <span class="temp-label">체감</span>
                       <span class="temp-val">{hour.feelsLike}°</span>
                     </div>
                   </div>
-
-                  {#if hour.precipitation > 0 || hour.precipitationAmount > 0}
-                    <div class="precipitation-info">
-                      <span class="precip-label">{t('rain')}</span>
-                      <span class="precip-value">
-                        {hour.precipitation}%
-                        ({hour.precipitationAmount.toFixed(1)}{t('mm')})
-                      </span>
-                    </div>
-                  {/if}
-
+                  <div class="precipitation-info">
+                    <span class="precip-label">강수확률/강수량</span>
+                    <span class="precip-value">{hour.precipitation || 0}% {#if hour.precipitationAmount > 0}({hour.precipitationAmount}mm){/if}</span>
+                  </div>
                   <div class="air-info">
                     <div class="air-metric">
-                      <span class="metric-label">{t('pm10')}</span>
-                      <span class="metric-value">{hour.pm10}</span>
-                      <span class="metric-grade" style="color: {pm10HourGrade.color}; font-size: 0.7rem;">{t(pm10HourGrade.grade)}</span>
+                      <span class="metric-label">미세먼지</span>
+                      <span class="metric-value" style="color: {pm10HourGrade.color};">{hour.pm10}</span>
+                      <span class="metric-grade" style="color: {pm10HourGrade.color};">{pm10HourGrade.grade}</span>
                     </div>
                     <div class="air-metric">
-                      <span class="metric-label">{t('pm25')}</span>
-                      <span class="metric-value">{hour.pm25}</span>
-                      <span class="metric-grade" style="color: {pm25HourGrade.color}; font-size: 0.7rem;">{t(pm25HourGrade.grade)}</span>
+                      <span class="metric-label">초미세먼지</span>
+                      <span class="metric-value" style="color: {pm25HourGrade.color};">{hour.pm25}</span>
+                      <span class="metric-grade" style="color: {pm25HourGrade.color};">{pm25HourGrade.grade}</span>
                     </div>
                   </div>
                 </div>
@@ -1659,7 +1834,8 @@
   }
 
   .weather-app {
-    min-height: 100vh;
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
     display: flex;
     flex-direction: column;
     background: linear-gradient(180deg, #0a0a0a 0%, #1a1a1a 100%);
@@ -1668,10 +1844,8 @@
 
   /* Header */
   .app-header {
-    position: fixed;
+    position: sticky;
     top: 0;
-    left: 0;
-    right: 0;
     width: 100%;
     z-index: 10000;
     background: rgba(10, 10, 10, 0.95);
@@ -1812,8 +1986,10 @@
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     padding: 2rem;
-    padding-top: 7rem; /* Reduced for single-row header */
+    padding-top: 2rem;
   }
 
   /* Scrollbar styling */
@@ -2073,10 +2249,18 @@
     padding: 0.5rem;
     background: rgba(255, 255, 255, 0.03);
     border-radius: 1rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .day-selector::-webkit-scrollbar {
+    display: none;
   }
 
   .day-tab {
     flex: 1;
+    min-width: 120px;
     padding: 0.75rem;
     background: transparent;
     border: 1px solid transparent;
@@ -2090,6 +2274,9 @@
     flex-direction: column;
     align-items: center;
     gap: 0.25rem;
+    white-space: nowrap;
+    min-height: 60px;
+    text-align: center;
   }
 
   .day-tab:hover {
@@ -2107,10 +2294,161 @@
     opacity: 0.7;
   }
 
-  .hourly-grid {
+  /* 시간대별 레이아웃 스타일 */
+  .desktop-layout {
+    display: block;
+  }
+
+  .tablet-layout {
+    display: none;
+  }
+
+  .mobile-layout {
+    display: none;
+  }
+
+  .time-period-section,
+  .ampm-period-section {
+    margin-bottom: 2rem;
+  }
+
+  .period-header {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .period-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .hourly-timeline {
+    display: flex;
     gap: 1rem;
+    overflow-x: auto;
+    padding: 1rem;
+    width: 100%;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .hourly-timeline::-webkit-scrollbar {
+    display: none;
+  }
+
+  .hour-detail-card-overview {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .hour-detail-card-overview .hour-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.25rem;
+  }
+
+  .hour-detail-card-overview .hour-time-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .hour-detail-card-overview .hour-weather-icon {
+    font-size: 1.2rem;
+  }
+
+  .hour-detail-card-overview .temp-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    padding: 0.25rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 0.5rem;
+  }
+
+  .hour-detail-card-overview .temp-val {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .hour-detail-card-overview .precipitation-info {
+    text-align: center;
+    margin-bottom: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+
+  .hour-detail-card-overview .precip-label {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .hour-detail-card-overview .precip-value {
+    font-size: 0.75rem;
+    color: rgba(135, 206, 250, 0.9);
+    font-weight: 500;
+  }
+
+  .hour-detail-card-overview .air-info {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.25rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 0.5rem;
+  }
+
+  .hour-detail-card-overview .air-metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    flex: 1;
+    gap: 0.1rem;
+  }
+
+  .hour-detail-card-overview .temp-label {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 0.1rem;
+    text-align: center;
+  }
+
+  .hour-detail-card-overview .metric-label {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .hour-detail-card-overview .actual-temp,
+  .hour-detail-card-overview .feels-temp {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .hour-detail-card-overview .metric-value {
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .hour-detail-card-overview .metric-grade {
+    font-size: 0.65rem;
+    font-weight: 500;
   }
 
   .hour-detail-card {
@@ -2119,6 +2457,7 @@
     border-radius: 1rem;
     padding: 1.25rem;
     transition: all 0.2s ease;
+    cursor: pointer;
   }
 
   .hour-detail-card:hover {
@@ -2130,14 +2469,13 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 0.75rem;
   }
 
   .hour-time-label {
     font-size: 0.875rem;
     font-weight: 600;
+    color: #60a5fa;
   }
 
   .hour-weather-icon {
@@ -2679,7 +3017,7 @@
     }
 
     .main-content {
-      padding-top: 6rem; /* Optimized for tablet single-row header */
+      padding-top: 2rem;
     }
   }
 
@@ -2723,7 +3061,42 @@
     }
 
     .main-content {
-      padding-top: 6.5rem; /* Optimized for desktop single-row header */
+      padding-top: 2rem;
+    }
+  }
+
+  /* Tablet Layout */
+  @media (min-width: 769px) and (max-width: 1024px) {
+    .day-selector {
+      gap: 0.75rem;
+      padding: 0.75rem;
+    }
+
+    .day-tab {
+      min-width: 110px;
+      padding: 0.75rem;
+    }
+
+    /* 태블릿: AM/PM 레이아웃 활성화 */
+    .desktop-layout {
+      display: none;
+    }
+
+    .tablet-layout {
+      display: block;
+    }
+
+    .mobile-layout {
+      display: none;
+    }
+
+    .period-grid {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+
+    .hour-detail-card {
+      padding: 1rem;
     }
   }
 
@@ -2750,7 +3123,6 @@
       padding: 0.5rem 0.625rem;
       font-size: 0.8rem;
       border-radius: 8px;
-      min-height: 42px;
     }
 
     .lang-flag {
@@ -2773,7 +3145,6 @@
     .tab-button {
       padding: 0.625rem 1rem;
       font-size: 0.85rem;
-      min-height: 44px;
     }
 
     .language-menu {
@@ -2786,7 +3157,7 @@
 
     .main-content {
       padding: 0.75rem;
-      padding-top: 9rem; /* Increased for mobile two-row header */
+      padding-top: 0.75rem;
     }
 
     .weather-main {
@@ -2823,12 +3194,54 @@
       grid-template-columns: 1fr;
     }
 
-    .hourly-grid {
-      grid-template-columns: 1fr;
+    /* 모바일: 가로 스크롤 타임라인 레이아웃 활성화 */
+    .desktop-layout {
+      display: none;
+    }
+
+    .tablet-layout {
+      display: none;
+    }
+
+    .mobile-layout {
+      display: block;
+    }
+
+    .hourly-timeline {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      width: 100%;
+    }
+
+    .hour-detail-card-overview {
+      width: 100%;
+      padding: 0.75rem;
+      height: auto;
     }
 
     .day-selector {
-      flex-direction: column;
+      flex-direction: row;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .day-selector::-webkit-scrollbar {
+      display: none;
+    }
+
+    .day-tab {
+      flex: none;
+      min-width: 120px;
+      padding: 0.75rem 1rem;
+    }
+
+    .hour-detail-card {
+      padding: 1rem;
     }
 
     .temp-value {
